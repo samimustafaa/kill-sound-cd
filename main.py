@@ -44,6 +44,7 @@ DEFAULT_EVENTS = {
 }
 DEFAULTS = {
     "counter_region": None, "message_region": None, "death_region": None,
+    "killer_region": None, "victim_region": None, "player_name": "",
     "tesseract": "", "keywords": "eliminated,killed,defeated,elimination",
     "death_keywords": "eliminated by,you died,you were eliminated",
     "volume": 0.9, "poll_interval": 0.40, "requires_game": True, "detection_mode": "counter",
@@ -120,7 +121,7 @@ def read_counter(sct, region):
 
 def read_message(sct, region):
     image = get_ocr_image(sct, region)
-    return " ".join(pytesseract.image_to_string(image, config="--psm 6").lower().split())
+    return "\\n".join(" ".join(line.split()) for line in pytesseract.image_to_string(image, config="--psm 6").lower().splitlines() if line.strip())
 
 class AudioEngine:
     def __init__(self, events):
@@ -213,18 +214,16 @@ class ScreenSelector(tk.Toplevel):
             self.done({"left": left, "top": top, "width": width, "height": height})
 
 class KillDetector:
+    """Kill-feed-only scanner: separately calibrated attacker/victim name columns."""
     def __init__(self, settings, emit):
         self.settings = settings.copy()
         self.emit = emit
         self.stop_event = threading.Event()
         self.thread = None
-        self.base = None
-        self.last_candidate = None
-        self.candidate_hits = 0
         self.streak = 0
-        self.last_message_time = 0.0
-        self.last_death_time = 0.0
-        self.last_announced_at = 0.0
+        self.seen = {}
+        self.last_game_check = 0.0
+        self.game_running = False
 
     def start(self):
         self.thread = threading.Thread(target=self._loop, daemon=True)
@@ -233,75 +232,76 @@ class KillDetector:
     def stop(self):
         self.stop_event.set()
 
+    @staticmethod
+    def name_present(line, username):
+        # Normalize spacing and punctuation while avoiding partial-name matches.
+        norm = lambda x: re.sub(r"[^a-z0-9]+", "", x.casefold())
+        tokens = re.findall(r"[a-z0-9_]+", line.casefold())
+        target = norm(username)
+        return bool(target) and (any(norm(t) == target for t in tokens) or
+                                  (len(target) >= 4 and target in norm(line)))
+
     def _loop(self):
         cfg = self.settings
         tess = find_tesseract(cfg["tesseract"])
         if not tess:
-            self.emit(("error", "Tesseract OCR not found. Install it or select tesseract.exe in Settings."))
+            self.emit(("error", "Tesseract OCR unavailable. Open Settings and test/install OCR."))
             return
         pytesseract.pytesseract.tesseract_cmd = tess
         bundled_data = asset_path("tesseract/tessdata")
         if bundled_data.is_dir() and Path(tess).resolve() == asset_path("tesseract/tesseract.exe").resolve():
             os.environ["TESSDATA_PREFIX"] = str(bundled_data)
-        keywords = [k.strip().lower() for k in cfg["keywords"].split(",") if k.strip()]
-        death_words = [k.strip().lower() for k in cfg["death_keywords"].split(",") if k.strip()]
-        last_game_check = 0.0
-        game_is_running = False
-        self.emit(("log", "Scanning in " + cfg.get("detection_mode", "counter") + " mode. Keep the kill counter visible."))
+        username = cfg["player_name"].strip()
+        self.emit(("log", "Kill-feed scanner started for " + username + ". Watching attacker and victim zones."))
         with mss.mss() as sct:
             while not self.stop_event.is_set():
                 now = time.monotonic()
                 if cfg["requires_game"]:
-                    if now - last_game_check > 2.0:
-                        game_is_running = running_game()
-                        last_game_check = now
-                    if not game_is_running:
-                        self.stop_event.wait(0.5)
+                    if now - self.last_game_check >= 2:
+                        self.game_running = running_game()
+                        self.last_game_check = now
+                    if not self.game_running:
+                        self.stop_event.wait(0.4)
                         continue
                 try:
-                    # Counter is the primary signal; on-screen message confirms it.
-                    message = read_message(sct, cfg["message_region"]) if cfg.get("message_region") else ""
-                    self.emit(("ocr", message[:110] or "(no message / counter-first mode)"))
-                    if any(k in message for k in keywords):
-                        self.last_message_time = time.monotonic()
-                    if cfg.get("death_region"):
-                        death_text = read_message(sct, cfg["death_region"])
-                        if any(k in death_text for k in death_words) and now - self.last_death_time > 5:
-                            self.streak = 0
-                            self.last_death_time = now
-                            self.emit(("log", "Death message detected — streak reset."))
-                            self.emit(("streak", self.streak))
-                    current = read_counter(sct, cfg["counter_region"])
-                    self.emit(("counter", current))
-                    if current is not None:
-                        if self.last_candidate == current:
-                            self.candidate_hits += 1
-                        else:
-                            self.last_candidate, self.candidate_hits = current, 1
-                        if self.candidate_hits >= 3:
-                            if self.base is None:
-                                self.base = current
-                                self.emit(("log", f"Counter baseline established: {current}"))
-                            elif current < self.base:
-                                self.base = current
-                                self.streak = 0
-                                self.emit(("streak", self.streak))
-                                self.emit(("log", "Kill counter reset — streak reset."))
-                            elif current > self.base:
-                                count = min(10, current - self.base)
-                                confirmed = cfg.get("detection_mode", "counter") == "counter" or now - self.last_message_time <= 2.5
-                                if confirmed and now - self.last_announced_at > 0.65:
-                                    self.base = current
-                                    self.streak += count
-                                    self.last_announced_at = time.monotonic()
-                                    self.emit(("kill", (self.streak, count)))
-                                elif now - self.last_message_time > 2.5:
-                                    # Two-signal mode: wait for the matching elimination text.
-                                    self.emit(("pending", current))
+                    attacker_text = read_message(sct, cfg["killer_region"])
+                    victim_text = read_message(sct, cfg["victim_region"])
+                    self.emit(("ocr", "ATTACKER: " + (attacker_text[:65] or "—") +
+                                     " | VICTIM: " + (victim_text[:65] or "—")))
+                    # Evaluate individual visible feed rows; only announce new rows.
+                    events = []
+                    for side, content in (("kill", attacker_text), ("death", victim_text)):
+                        for line in content.splitlines():
+                            line = " ".join(line.split())
+                            if line and self.name_present(line, username):
+                                events.append((side, line))
+                    # Avoid ambiguous detections when the name is in both calibrated zones.
+                    active_sides = {side for side, _ in events}
+                    if len(active_sides) == 1:
+                        for side, line in events:
+                            key = (side, line)
+                            if key not in self.seen:
+                                self.seen[key] = now
+                                if side == "death":
+                                    self.streak = 0
+                                    self.emit(("streak", 0))
+                                    self.emit(("log", "Death feed matched: " + line[:100]))
+                                else:
+                                    self.streak += 1
+                                    self.emit(("kill", (self.streak, 1)))
+                                    self.emit(("log", "Kill feed matched: " + line[:100]))
+                    else:
+                        if events:
+                            self.emit(("log", "Ambiguous feed: name on both sides; ignored."))
+                    # Keep recent events to prevent duplicate sounds while feed entries linger.
+                    for key, when in list(self.seen.items()):
+                        if now - when >= 12:
+                            del self.seen[key]
                 except Exception as exc:
-                    self.emit(("log", f"Scan error: {exc}"))
-                self.stop_event.wait(max(0.15, float(cfg["poll_interval"])))
-        self.emit(("log", "Scanner stopped."))
+                    self.emit(("log", f"Kill-feed scan error: {exc}"))
+                self.stop_event.wait(max(0.2, float(cfg["poll_interval"])))
+        self.emit(("log", "Kill-feed scanner stopped."))
+
 
 class App(tk.Tk):
     def __init__(self):
@@ -321,7 +321,8 @@ class App(tk.Tk):
         self.keywords_str = tk.StringVar(value=self.settings["keywords"])
         self.death_str = tk.StringVar(value=self.settings["death_keywords"])
         self.requires_game_var = tk.BooleanVar(value=self.settings["requires_game"])
-        self.counter_first_var = tk.BooleanVar(value=self.settings.get("detection_mode", "counter") == "counter")
+        self.counter_first_var = tk.BooleanVar(value=False)
+        self.player_name_var = tk.StringVar(value=self.settings.get("player_name", ""))
         self.volume_var = tk.DoubleVar(value=self.settings["volume"])
         self.tess_var = tk.StringVar(value=self.settings["tesseract"])
         self.ocr_status_var = tk.StringVar(value="Checking OCR engine...")
@@ -435,26 +436,29 @@ class App(tk.Tk):
 
     def _detection_tab(self, tab):
         c = self.palette
-        self._heading(tab, "DETECTION SETUP", "Select the areas of your game screen to monitor. Both kill signals must match before a sound plays.")
+        self._heading(tab, "KILL FEED DETECTION", "No kill counter needed. Select two areas inside your kill feed: the ATTACKER names and the VICTIM names.")
+        name_row = tk.Frame(tab, bg=c["surface"], padx=18, pady=14)
+        name_row.pack(fill="x", pady=(0, 12))
+        tk.Label(name_row, text="YOUR EXACT IN-GAME NAME", bg=c["surface"], fg=c["text"], font=("Segoe UI", 10, "bold")).pack(anchor="w")
+        ttk.Entry(name_row, textvariable=self.player_name_var, width=38).pack(fill="x", pady=(8, 0))
+        tk.Label(tab, text="Example:  [ YOU ]  weapon  [ ENEMY ] → kill   •   [ ENEMY ]  weapon  [ YOU ] → death",
+                 bg=c["bg"], fg=c["accent"], font=("Segoe UI", 10)).pack(anchor="w", pady=(0, 12))
         self.region_labels = {}
-        for index, (key, name, subtitle) in enumerate([
-            ("counter_region", "Kill counter", "The number showing your kills"),
-            ("message_region", "Elimination feed", "Text that appears after eliminating a player"),
-            ("death_region", "Death notification", "Optional — reset your streak when eliminated")]):
-            card = tk.Frame(tab, bg=c["surface"], highlightthickness=1, highlightbackground=c["edge"])
-            card.pack(fill="x", pady=(0, 8))
-            copy = tk.Frame(card, bg=c["surface"])
-            copy.pack(side="left", padx=17, pady=11, fill="x", expand=True)
-            tk.Label(copy, text=f"0{index+1}  {name.upper()}", bg=c["surface"], fg=c["text"], font=("Segoe UI", 10, "bold")).pack(anchor="w")
-            value = tk.StringVar(value=rect_string(self.settings[key]))
+        for index, (key, label, help_text) in enumerate([
+            ("killer_region", "LEFT — ATTACKER NAMES", "Select the left-side name column in the kill feed only."),
+            ("victim_region", "RIGHT — VICTIM NAMES", "Select the right-side name column in the same feed only.")]):
+            panel = tk.Frame(tab, bg=c["surface"], padx=16, pady=13, highlightbackground=c["edge"], highlightthickness=1)
+            panel.pack(fill="x", pady=(0, 10))
+            tk.Label(panel, text=label, bg=c["surface"], fg=c["text"], font=("Segoe UI", 10, "bold")).pack(anchor="w")
+            tk.Label(panel, text=help_text, bg=c["surface"], fg=c["muted"]).pack(anchor="w", pady=(3, 7))
+            value = tk.StringVar(value=rect_string(self.settings.get(key)))
             self.region_labels[key] = value
-            tk.Label(copy, textvariable=value, bg=c["surface"], fg=c["accent"], font=("Segoe UI", 9)).pack(anchor="w", pady=(2, 0))
-            ttk.Button(card, text="SELECT AREA  ↗", command=lambda k=key, n=name: self.select_region(k, n)).pack(side="right", padx=14)
-        ttk.Checkbutton(tab, text="COUNTER-FIRST MODE (recommended)  ·  Announce a stable kill-count increase without relying on elimination words", variable=self.counter_first_var).pack(anchor="w", pady=(10, 5))
-        tk.Label(tab, text="LIVE ELIMINATION PREVIEW", bg=c["bg"], fg=c["muted"], font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(13, 7))
-        tk.Label(tab, textvariable=self.ocr_str, bg=c["surface"], fg=c["accent"], anchor="w", padx=14, pady=12, wraplength=650).pack(fill="x")
+            tk.Label(panel, textvariable=value, bg=c["surface"], fg=c["accent"]).pack(side="left")
+            ttk.Button(panel, text="SELECT AREA", command=lambda k=key, n=label: self.select_region(k, n)).pack(side="right")
+        tk.Label(tab, text="LIVE OCR — verify your name is read in the correct column", bg=c["bg"], fg=c["muted"], font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(12, 6))
+        tk.Label(tab, textvariable=self.ocr_str, bg=c["surface"], fg=c["accent"], anchor="w", padx=14, pady=12, wraplength=790).pack(fill="x")
         tk.Label(tab, text="ACTIVITY LOG", bg=c["bg"], fg=c["muted"], font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(16, 7))
-        self.logs = tk.Text(tab, height=5, state="disabled", bg=c["surface"], fg="#c6d6eb", relief="flat", insertbackground=c["text"], font=("Consolas", 10), padx=12, pady=10)
+        self.logs = tk.Text(tab, height=6, state="disabled", bg=c["surface"], fg="#c6d6eb", relief="flat", insertbackground=c["text"], font=("Consolas", 10), padx=12, pady=10)
         self.logs.pack(fill="both", expand=True)
 
     def _sounds_tab(self, tab):
@@ -696,7 +700,8 @@ class App(tk.Tk):
         self.settings["keywords"] = self.keywords_str.get().strip()
         self.settings["death_keywords"] = self.death_str.get().strip()
         self.settings["requires_game"] = self.requires_game_var.get()
-        self.settings["detection_mode"] = "counter" if self.counter_first_var.get() else "both"
+        self.settings["detection_mode"] = "feed"
+        self.settings["player_name"] = self.player_name_var.get().strip()
         self.settings["auto_update"] = self.auto_update_var.get()
         self.settings["volume"] = round(self.volume_var.get(), 2)
         self.settings["phrases"] = {k: v.get() for k, v in self.phrase_entries.items()}
@@ -714,8 +719,8 @@ class App(tk.Tk):
                 self.after(250, lambda: self._start_install(*update))
             return
         self.save()
-        if not self.settings["counter_region"] or (self.settings["detection_mode"] == "both" and not self.settings["message_region"]):
-            messagebox.showwarning("Calibration needed", "Select the kill counter region (and elimination region if using two-signal mode).")
+        if not self.settings.get("player_name") or not self.settings.get("killer_region") or not self.settings.get("victim_region"):
+            messagebox.showwarning("Calibration needed", "Enter your exact player name and select both attacker and victim name areas in the kill feed.")
             return
         if not find_tesseract(self.settings["tesseract"]):
             messagebox.showerror("OCR missing", "Install Tesseract OCR first, or select its executable in Settings.")
