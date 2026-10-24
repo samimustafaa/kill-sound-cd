@@ -275,26 +275,21 @@ class KillDetector:
                             line = " ".join(line.split())
                             if line and self.name_present(line, username):
                                 events.append((side, line))
-                    # Avoid ambiguous detections when the name is in both calibrated zones.
-                    active_sides = {side for side, _ in events}
-                    if len(active_sides) == 1:
-                        for side, line in events:
-                            key = (side, line)
-                            if key not in self.seen:
-                                self.seen[key] = now
-                                if side == "death":
-                                    self.streak = 0
-                                    self.emit(("streak", 0))
-                                    self.emit(("log", "Death feed matched: " + line[:100]))
-                                else:
-                                    self.streak += 1
-                                    self.emit(("kill", (self.streak, 1)))
-                                    self.emit(("log", "Kill feed matched: " + line[:100]))
-                    else:
-                        if events:
-                            self.emit(("log", "Ambiguous feed: name on both sides; ignored."))
+                    # Each calibrated column is independent; feeds may show old rows from both sides.
+                    for side, line in events:
+                        key = (side, line)
+                        if key not in self.seen:
+                            self.seen[key] = now
+                            if side == "death":
+                                self.streak = 0
+                                self.emit(("streak", 0))
+                                self.emit(("log", "Death feed matched: " + line[:100]))
+                            else:
+                                self.streak += 1
+                                self.emit(("kill", (self.streak, 1)))
+                                self.emit(("log", "Kill feed matched: " + line[:100]))
                     # Refresh visible rows, and re-arm only after a row disappears.
-                    active_keys = set(events) if len(active_sides) == 1 else set()
+                    active_keys = set(events)
                     for key in active_keys:
                         if key in self.seen:
                             self.seen[key] = now
