@@ -46,7 +46,7 @@ DEFAULTS = {
     "counter_region": None, "message_region": None, "death_region": None,
     "tesseract": "", "keywords": "eliminated,killed,defeated,elimination",
     "death_keywords": "eliminated by,you died,you were eliminated",
-    "volume": 0.9, "poll_interval": 0.40, "requires_game": True,
+    "volume": 0.9, "poll_interval": 0.40, "requires_game": True, "detection_mode": "counter",
     "phrases": DEFAULT_EVENTS.copy(), "sounds": {}, "active": False, "auto_update": True,
 }
 
@@ -247,7 +247,7 @@ class KillDetector:
         death_words = [k.strip().lower() for k in cfg["death_keywords"].split(",") if k.strip()]
         last_game_check = 0.0
         game_is_running = False
-        self.emit(("log", "Scanning. Start a match and keep the HUD visible."))
+        self.emit(("log", "Scanning in " + cfg.get("detection_mode", "counter") + " mode. Keep the kill counter visible."))
         with mss.mss() as sct:
             while not self.stop_event.is_set():
                 now = time.monotonic()
@@ -260,8 +260,8 @@ class KillDetector:
                         continue
                 try:
                     # Counter is the primary signal; on-screen message confirms it.
-                    message = read_message(sct, cfg["message_region"])
-                    self.emit(("ocr", message[:110] or "(empty)"))
+                    message = read_message(sct, cfg["message_region"]) if cfg.get("message_region") else ""
+                    self.emit(("ocr", message[:110] or "(no message / counter-first mode)"))
                     if any(k in message for k in keywords):
                         self.last_message_time = time.monotonic()
                     if cfg.get("death_region"):
@@ -278,7 +278,7 @@ class KillDetector:
                             self.candidate_hits += 1
                         else:
                             self.last_candidate, self.candidate_hits = current, 1
-                        if self.candidate_hits >= 2:
+                        if self.candidate_hits >= 3:
                             if self.base is None:
                                 self.base = current
                                 self.emit(("log", f"Counter baseline established: {current}"))
@@ -289,13 +289,14 @@ class KillDetector:
                                 self.emit(("log", "Kill counter reset — streak reset."))
                             elif current > self.base:
                                 count = min(10, current - self.base)
-                                if now - self.last_message_time <= 2.5 and now - self.last_announced_at > 0.65:
+                                confirmed = cfg.get("detection_mode", "counter") == "counter" or now - self.last_message_time <= 2.5
+                                if confirmed and now - self.last_announced_at > 0.65:
                                     self.base = current
                                     self.streak += count
                                     self.last_announced_at = time.monotonic()
                                     self.emit(("kill", (self.streak, count)))
                                 elif now - self.last_message_time > 2.5:
-                                    # Wait briefly for the message: don't confirm a kill on counter OCR alone.
+                                    # Two-signal mode: wait for the matching elimination text.
                                     self.emit(("pending", current))
                 except Exception as exc:
                     self.emit(("log", f"Scan error: {exc}"))
@@ -320,6 +321,7 @@ class App(tk.Tk):
         self.keywords_str = tk.StringVar(value=self.settings["keywords"])
         self.death_str = tk.StringVar(value=self.settings["death_keywords"])
         self.requires_game_var = tk.BooleanVar(value=self.settings["requires_game"])
+        self.counter_first_var = tk.BooleanVar(value=self.settings.get("detection_mode", "counter") == "counter")
         self.volume_var = tk.DoubleVar(value=self.settings["volume"])
         self.tess_var = tk.StringVar(value=self.settings["tesseract"])
         self.ocr_status_var = tk.StringVar(value="Checking OCR engine...")
@@ -448,6 +450,7 @@ class App(tk.Tk):
             self.region_labels[key] = value
             tk.Label(copy, textvariable=value, bg=c["surface"], fg=c["accent"], font=("Segoe UI", 9)).pack(anchor="w", pady=(2, 0))
             ttk.Button(card, text="SELECT AREA  ↗", command=lambda k=key, n=name: self.select_region(k, n)).pack(side="right", padx=14)
+        ttk.Checkbutton(tab, text="COUNTER-FIRST MODE (recommended)  ·  Announce a stable kill-count increase without relying on elimination words", variable=self.counter_first_var).pack(anchor="w", pady=(10, 5))
         tk.Label(tab, text="LIVE ELIMINATION PREVIEW", bg=c["bg"], fg=c["muted"], font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(13, 7))
         tk.Label(tab, textvariable=self.ocr_str, bg=c["surface"], fg=c["accent"], anchor="w", padx=14, pady=12, wraplength=650).pack(fill="x")
         tk.Label(tab, text="ACTIVITY LOG", bg=c["bg"], fg=c["muted"], font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(16, 7))
@@ -693,6 +696,7 @@ class App(tk.Tk):
         self.settings["keywords"] = self.keywords_str.get().strip()
         self.settings["death_keywords"] = self.death_str.get().strip()
         self.settings["requires_game"] = self.requires_game_var.get()
+        self.settings["detection_mode"] = "counter" if self.counter_first_var.get() else "both"
         self.settings["auto_update"] = self.auto_update_var.get()
         self.settings["volume"] = round(self.volume_var.get(), 2)
         self.settings["phrases"] = {k: v.get() for k, v in self.phrase_entries.items()}
@@ -710,8 +714,8 @@ class App(tk.Tk):
                 self.after(250, lambda: self._start_install(*update))
             return
         self.save()
-        if not self.settings["counter_region"] or not self.settings["message_region"]:
-            messagebox.showwarning("Calibration needed", "Select both kill counter and elimination message regions.")
+        if not self.settings["counter_region"] or (self.settings["detection_mode"] == "both" and not self.settings["message_region"]):
+            messagebox.showwarning("Calibration needed", "Select the kill counter region (and elimination region if using two-signal mode).")
             return
         if not find_tesseract(self.settings["tesseract"]):
             messagebox.showerror("OCR missing", "Install Tesseract OCR first, or select its executable in Settings.")
