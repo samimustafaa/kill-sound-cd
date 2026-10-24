@@ -28,15 +28,20 @@ jobs:
           Copy-Item 'C:\Program Files\Tesseract-OCR\tesseract.exe' tesseract\
           Copy-Item 'C:\Program Files\Tesseract-OCR\*.dll' tesseract\
           Copy-Item 'C:\Program Files\Tesseract-OCR\tessdata\eng.traineddata' tesseract\tessdata\
-      - name: Package portable Windows app
+      - name: Build Windows application
         shell: pwsh
         run: |
           pyinstaller --noconfirm --clean --windowed --onedir --name CD-Kill-Announcer --add-data 'tesseract;tesseract' --hidden-import win32com.client main.py
-          Compress-Archive -Path dist\CD-Kill-Announcer -DestinationPath CD-Kill-Announcer-Windows.zip -Force
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
+      - name: Build installer EXE
+        shell: pwsh
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss'
       - uses: actions/upload-artifact@v4
         with:
-          name: CD-Kill-Announcer-Windows
-          path: CD-Kill-Announcer-Windows.zip
+          name: CD-Kill-Announcer-Installer
+          path: CD-Kill-Announcer-Setup.exe
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -46,4 +51,4 @@ jobs:
           $tag = "v$version"
           gh release view $tag --repo "${{ github.repository }}" *> $null
           if ($LASTEXITCODE -eq 0) { Write-Host "Release $tag already exists"; exit 0 }
-          gh release create $tag CD-Kill-Announcer-Windows.zip --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "CD Kill Announcer $tag" --generate-notes
+          gh release create $tag CD-Kill-Announcer-Setup.exe --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "CD Kill Announcer $tag" --generate-notes
