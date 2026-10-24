@@ -190,7 +190,7 @@ class ScreenSelector(tk.Toplevel):
         self.canvas.pack(fill="both", expand=True)
         self.canvas.create_text(self.winfo_screenwidth() // 2, 55,
                                 text=f"Drag over {label}  •  ESC to cancel", fill="white",
-                                font=("Segoe UI", 22, "bold"))
+                                font=("Aptos", 22, "bold"))
         self.start = None
         self.outline = None
         self.canvas.bind("<ButtonPress-1>", self.begin)
@@ -324,6 +324,7 @@ class App(tk.Tk):
         self.detector = None
         self.state_str = tk.StringVar(value="IDLE")
         self.counter_str = tk.StringVar(value="0")
+        self.total_kills = 0
         self.streak_str = tk.StringVar(value="0")
         self.ocr_str = tk.StringVar(value="—")
         self.keywords_str = tk.StringVar(value=self.settings["keywords"])
@@ -346,29 +347,29 @@ class App(tk.Tk):
 
     def _build(self):
         # Refined native desktop shell. Scanner, audio and update worker stay unchanged.
-        self.palette = {"bg": "#0c121b", "surface": "#151e2a", "raised": "#1f2c3c",
-                        "edge": "#29374a", "text": "#eff5fb", "muted": "#94a6b8",
-                        "accent": "#19c9c3", "purple": "#9dadd1", "warning": "#e8b279"}
+        self.palette = {"bg": "#0c0c0e", "surface": "#121216", "raised": "#202025",
+                        "edge": "#28282e", "text": "#ececef", "muted": "#858590",
+                        "accent": "#06d5b6", "purple": "#b2adc0", "warning": "#f1a837"}
         c = self.palette
         self.configure(bg=c["bg"])
-        self.geometry("1060x690")
-        self.minsize(810, 540)
+        self.geometry("1180x760")
+        self.resizable(False, False)
         style = ttk.Style(self)
         style.theme_use("clam")
         style.configure("TFrame", background=c["bg"])
         style.configure("Panel.TFrame", background=c["surface"])
-        style.configure("TLabel", background=c["bg"], foreground=c["text"], font=("Segoe UI", 10))
-        style.configure("Panel.TLabel", background=c["surface"], foreground=c["text"], font=("Segoe UI", 10))
-        style.configure("Muted.TLabel", background=c["bg"], foreground=c["muted"], font=("Segoe UI", 10))
+        style.configure("TLabel", background=c["bg"], foreground=c["text"], font=("Aptos", 10))
+        style.configure("Panel.TLabel", background=c["surface"], foreground=c["text"], font=("Aptos", 10))
+        style.configure("Muted.TLabel", background=c["bg"], foreground=c["muted"], font=("Aptos", 10))
         style.configure("TEntry", fieldbackground=c["raised"], foreground=c["text"],
                         insertcolor=c["text"], padding=9, borderwidth=1)
         style.configure("TButton", background=c["raised"], foreground=c["text"],
-                        borderwidth=0, padding=(14, 10), font=("Segoe UI", 10, "bold"))
+                        borderwidth=0, padding=(14, 10), font=("Aptos", 10, "bold"))
         style.map("TButton", background=[("active", "#30445a"), ("pressed", "#3c5670")])
         style.configure("Accent.TButton", background=c["accent"], foreground="#071c22",
-                        borderwidth=0, padding=(20, 13), font=("Segoe UI", 11, "bold"))
+                        borderwidth=0, padding=(20, 13), font=("Aptos", 11, "bold"))
         style.map("Accent.TButton", background=[("active", "#a1fff1"), ("pressed", "#55c8b9")])
-        style.configure("TCheckbutton", background=c["surface"], foreground=c["text"], font=("Segoe UI", 10))
+        style.configure("TCheckbutton", background=c["surface"], foreground=c["text"], font=("Aptos", 10))
         style.map("TCheckbutton", background=[("active", c["surface"])])
         style.configure("TScale", background=c["surface"], troughcolor=c["raised"])
         style.configure("Invisible.TNotebook", background=c["bg"], borderwidth=0, tabmargins=0)
@@ -377,19 +378,19 @@ class App(tk.Tk):
         root = tk.Frame(self, bg=c["bg"])
         root.pack(fill="both", expand=True)
 
-        sidebar = tk.Frame(root, bg="#101824", width=170)
+        sidebar = tk.Frame(root, bg="#111115", width=205)
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
-        logo = tk.Frame(sidebar, bg="#101824")
+        logo = tk.Frame(sidebar, bg="#111115")
         logo.pack(fill="x", padx=16, pady=(22, 24))
-        tk.Label(logo, text="CD", bg="#101824", fg=c["accent"], font=("Segoe UI", 23, "bold")).pack(anchor="w")
-        tk.Label(logo, text="KILL ANNOUNCER", bg="#101824", fg=c["text"],
-                 font=("Segoe UI", 11, "bold")).pack(anchor="w", pady=(8, 3))
-        tk.Label(logo, text="by sg0hann", bg="#101824", fg=c["muted"],
-                 font=("Segoe UI", 9)).pack(anchor="w")
+        tk.Label(logo, text="CD", bg="#111115", fg=c["accent"], font=("Aptos", 23, "bold")).pack(anchor="w")
+        tk.Label(logo, text="KILL ANNOUNCER", bg="#111115", fg=c["text"],
+                 font=("Aptos", 11, "bold")).pack(anchor="w", pady=(8, 3))
+        tk.Label(logo, text="by sg0hann", bg="#111115", fg=c["muted"],
+                 font=("Aptos", 9)).pack(anchor="w")
         tk.Frame(sidebar, bg="#293748", height=1).pack(fill="x", padx=18, pady=(0, 19))
-        tk.Label(sidebar, text="NAVIGATION", bg="#101824", fg="#7990aa",
-                 font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=19, pady=(0, 8))
+        tk.Label(sidebar, text="NAVIGATION", bg="#111115", fg="#7990aa",
+                 font=("Aptos", 9, "bold")).pack(anchor="w", padx=19, pady=(0, 8))
 
         workspace = tk.Frame(root, bg=c["bg"])
         workspace.pack(side="left", fill="both", expand=True, padx=17, pady=(15, 12))
@@ -398,26 +399,26 @@ class App(tk.Tk):
         copy = tk.Frame(header, bg=c["bg"])
         copy.pack(side="left", fill="x", expand=True)
         tk.Label(copy, text="CD Kill Announcer", bg=c["bg"], fg=c["text"],
-                 font=("Segoe UI", 20, "bold")).pack(anchor="w")
+                 font=("Aptos", 20, "bold")).pack(anchor="w")
         tk.Label(copy, text="Personal kill-feed announcer  /  Creative Destruction", bg=c["bg"],
-                 fg=c["muted"], font=("Segoe UI", 10)).pack(anchor="w", pady=(3, 0))
+                 fg=c["muted"], font=("Aptos", 10)).pack(anchor="w", pady=(3, 0))
         tk.Label(header, text=f"  v{VERSION}  ", bg=c["raised"], fg=c["accent"],
-                 font=("Segoe UI", 10, "bold"), padx=10, pady=9).pack(side="right")
+                 font=("Aptos", 10, "bold"), padx=10, pady=9).pack(side="right")
 
         stats = tk.Frame(workspace, bg=c["bg"])
-        stats.pack(side="bottom", fill="x", pady=(9, 0))
+        stats.pack(fill="x", pady=(0, 12))
         for i, (label, var, fg, symbol) in enumerate([
             ("GAME / DETECTOR", self.state_str, c["accent"], "◉"),
-            ("KILLS THIS STREAK", self.streak_str, c["text"], "⌖"),
-            ("CURRENT STREAK", self.streak_str, c["purple"], "⚡")]):
+            ("KILLS DETECTED", self.counter_str, c["text"], "⌖"),
+            ("CURRENT STREAK", self.streak_str, c["warning"], "⚡")]):
             card = tk.Frame(stats, bg=c["surface"], highlightthickness=1,
                             highlightbackground=c["edge"])
             card.grid(row=0, column=i, sticky="nsew", padx=(0, 10) if i < 2 else 0)
             stats.columnconfigure(i, weight=1, uniform="stats")
             tk.Label(card, text=f"{symbol}   {label}", bg=c["surface"], fg=c["muted"],
-                     font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=13, pady=(8, 2))
+                     font=("Aptos", 9, "bold")).pack(anchor="w", padx=13, pady=(8, 2))
             tk.Label(card, textvariable=var, bg=c["surface"], fg=fg,
-                     font=("Segoe UI", 18, "bold")).pack(anchor="w", padx=13, pady=(0, 9))
+                     font=("Aptos", 18, "bold")).pack(anchor="w", padx=13, pady=(0, 9))
 
         # Pack action dock before the expanding page container, so it is never hidden.
         dock = tk.Frame(workspace, bg=c["surface"], highlightthickness=1,
@@ -445,41 +446,41 @@ class App(tk.Tk):
             nav.select(index)
             for position, button in enumerate(self._nav_buttons):
                 active = position == index
-                button.configure(bg="#1c3a48" if active else "#101824",
+                button.configure(bg="#242429" if active else "#111115",
                                  fg=c["accent"] if active else "#b9c8da")
         pages = ("⌖   Dashboard", "♫   Sound Library", "⚙   Settings")
         for index, name in enumerate(pages):
             button = tk.Button(sidebar, text=name, anchor="w", relief="flat",
-                               borderwidth=0, cursor="hand2", bg="#101824",
-                               fg="#b9c8da", activebackground="#27475a",
+                               borderwidth=0, cursor="hand2", bg="#111115",
+                               fg="#b9c8da", activebackground="#25252b",
                                activeforeground="#a8fff4", padx=11, pady=10,
-                               font=("Segoe UI", 10, "bold"),
+                               font=("Aptos", 10, "bold"),
                                command=lambda idx=index: select_page(idx))
             button.pack(fill="x", padx=10, pady=3)
             button.bind("<Enter>", lambda _e, b=button, idx=index:
-                        b.configure(bg="#263649") if self._active_page != idx else None)
+                        b.configure(bg="#202025") if self._active_page != idx else None)
             button.bind("<Leave>", lambda _e, b=button, idx=index:
-                        b.configure(bg="#101824") if self._active_page != idx else None)
+                        b.configure(bg="#111115") if self._active_page != idx else None)
             self._nav_buttons.append(button)
-        self._nav_buttons[0].configure(bg="#21384a", fg=c["accent"])
+        self._nav_buttons[0].configure(bg="#242429", fg=c["accent"])
 
         # Keep updates accessible at all sizes, separate from page content.
-        update_panel = tk.Frame(sidebar, bg="#101824")
+        update_panel = tk.Frame(sidebar, bg="#111115")
         update_panel.pack(side="bottom", fill="x", padx=13, pady=(0, 17))
-        tk.Label(update_panel, text="RELEASE CENTER", bg="#101824", fg="#839ab3",
-                 font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(0, 7))
-        tk.Label(update_panel, textvariable=self.update_status_var, bg="#101824",
+        tk.Label(update_panel, text="RELEASE CENTER", bg="#111115", fg="#839ab3",
+                 font=("Aptos", 9, "bold")).pack(anchor="w", pady=(0, 7))
+        tk.Label(update_panel, textvariable=self.update_status_var, bg="#111115",
                  fg=c["accent"], wraplength=175, justify="left",
-                 font=("Segoe UI", 9)).pack(anchor="w", pady=(0, 11))
+                 font=("Aptos", 9)).pack(anchor="w", pady=(0, 11))
         update_button = tk.Button(update_panel, text="↻  CHECK FOR UPDATES",
-                                  command=self.check_updates, bg="#223d49", fg="#b8fff3",
+                                  command=self.check_updates, bg="#242429", fg="#b8fff3",
                                   relief="flat", bd=0, cursor="hand2", pady=12,
-                                  font=("Segoe UI", 9, "bold"))
+                                  font=("Aptos", 9, "bold"))
         update_button.pack(fill="x")
-        update_button.bind("<Enter>", lambda _e: update_button.configure(bg="#30566a"))
-        update_button.bind("<Leave>", lambda _e: update_button.configure(bg="#223d49"))
-        tk.Label(update_panel, text="SG0HANN  ·  DESKTOP", bg="#101824", fg="#71869f",
-                 font=("Segoe UI", 8)).pack(anchor="w", pady=(18, 0))
+        update_button.bind("<Enter>", lambda _e: update_button.configure(bg="#34343b"))
+        update_button.bind("<Leave>", lambda _e: update_button.configure(bg="#242429"))
+        tk.Label(update_panel, text="SG0HANN  ·  DESKTOP", bg="#111115", fg="#71869f",
+                 font=("Aptos", 8)).pack(anchor="w", pady=(18, 0))
 
         # Content pages use independent scroll areas; no clipping on shorter monitors.
         self._detection_tab(self._scrollable_page(detection))
@@ -509,35 +510,64 @@ class App(tk.Tk):
 
     def _heading(self, parent, label, description):
         c = self.palette
-        tk.Label(parent, text=label, bg=c["bg"], fg=c["text"], font=("Segoe UI", 14, "bold")).pack(anchor="w", pady=(6, 3))
-        tk.Label(parent, text=description, bg=c["bg"], fg=c["muted"], font=("Segoe UI", 10), wraplength=700, justify="left").pack(anchor="w", pady=(0, 17))
+        tk.Label(parent, text=label, bg=c["bg"], fg=c["text"], font=("Aptos", 14, "bold")).pack(anchor="w", pady=(6, 3))
+        tk.Label(parent, text=description, bg=c["bg"], fg=c["muted"], font=("Aptos", 10), wraplength=700, justify="left").pack(anchor="w", pady=(0, 17))
 
     def _detection_tab(self, tab):
         c = self.palette
-        self._heading(tab, "Kill feed setup", "Set your username and select the left attacker / right victim name columns.")
-        name_row = tk.Frame(tab, bg=c["surface"], padx=14, pady=10)
-        name_row.pack(fill="x", pady=(0, 12))
-        tk.Label(name_row, text="YOUR IN-GAME NAME", bg=c["surface"], fg=c["text"], font=("Segoe UI", 10, "bold")).pack(anchor="w")
-        ttk.Entry(name_row, textvariable=self.player_name_var, width=38).pack(fill="x", pady=(8, 0))
-        tk.Label(tab, text="Example:  [ YOU ]  weapon  [ ENEMY ] → kill   •   [ ENEMY ]  weapon  [ YOU ] → death",
-                 bg=c["bg"], fg=c["accent"], font=("Segoe UI", 10)).pack(anchor="w", pady=(0, 12))
+        self._heading(tab, "Kill Feed Setup", "Set your username and select the attacker / victim name columns from your screen.")
+        identity = tk.Frame(tab, bg=c["surface"], highlightbackground=c["edge"], highlightthickness=1)
+        identity.pack(fill="x", pady=(0, 12))
+        tk.Label(identity, text="YOUR IN-GAME NAME", bg=c["surface"], fg=c["text"],
+                 font=("Aptos", 10, "bold")).pack(anchor="w", padx=16, pady=(12, 2))
+        tk.Label(identity, text="This is the username that appears in your kill feed.", bg=c["surface"],
+                 fg=c["muted"], font=("Aptos", 9)).pack(anchor="w", padx=16)
+        ttk.Entry(identity, textvariable=self.player_name_var).pack(fill="x", padx=16, pady=(10, 9))
+        tk.Label(identity, text="[ YOU ]  weapon  [ ENEMY ]   → KILL       |       [ ENEMY ]  weapon  [ YOU ]   → DEATH",
+                 bg=c["raised"], fg=c["accent"], font=("Aptos", 9), padx=12, pady=8).pack(fill="x", padx=16, pady=(0, 12))
+        regions = tk.Frame(tab, bg=c["bg"])
+        regions.pack(fill="x", pady=(0, 12))
+        regions.columnconfigure(0, weight=1, uniform="region")
+        regions.columnconfigure(1, weight=1, uniform="region")
         self.region_labels = {}
-        for index, (key, label, help_text) in enumerate([
-            ("killer_region", "LEFT — ATTACKER NAMES", "Select the left-side name column in the kill feed only."),
-            ("victim_region", "RIGHT — VICTIM NAMES", "Select the right-side name column in the same feed only.")]):
-            panel = tk.Frame(tab, bg=c["surface"], padx=13, pady=9, highlightbackground=c["edge"], highlightthickness=1)
-            panel.pack(fill="x", pady=(0, 10))
-            tk.Label(panel, text=label, bg=c["surface"], fg=c["text"], font=("Segoe UI", 10, "bold")).pack(anchor="w")
-            tk.Label(panel, text=help_text, bg=c["surface"], fg=c["muted"]).pack(anchor="w", pady=(3, 7))
+        for index, (key, title, desc, tint) in enumerate([
+            ("killer_region", "LEFT — ATTACKER NAMES", "Select only the left-side names in the kill feed.", c["accent"]),
+            ("victim_region", "RIGHT — VICTIM NAMES", "Select only the right-side names in the kill feed.", "#c95661")]):
+            card = tk.Frame(regions, bg=c["surface"], highlightbackground=c["edge"],
+                            highlightthickness=1, padx=14, pady=12)
+            card.grid(row=0, column=index, sticky="nsew", padx=(0, 7) if index == 0 else (7, 0))
+            tk.Label(card, text="●  " + title, bg=c["surface"], fg=tint,
+                     font=("Aptos", 10, "bold")).pack(anchor="w")
+            tk.Label(card, text=desc, bg=c["surface"], fg=c["muted"],
+                     font=("Aptos", 9)).pack(anchor="w", pady=(8, 12))
             value = tk.StringVar(value=rect_string(self.settings.get(key)))
             self.region_labels[key] = value
-            tk.Label(panel, textvariable=value, bg=c["surface"], fg=c["accent"]).pack(side="left")
-            ttk.Button(panel, text="SELECT AREA", command=lambda k=key, n=label: self.select_region(k, n)).pack(side="right")
-        tk.Label(tab, text="LIVE OCR — verify your name is read in the correct column", bg=c["bg"], fg=c["muted"], font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(12, 6))
-        tk.Label(tab, textvariable=self.ocr_str, bg=c["surface"], fg=c["accent"], anchor="w", padx=14, pady=12, wraplength=790).pack(fill="x")
-        tk.Label(tab, text="ACTIVITY LOG", bg=c["bg"], fg=c["muted"], font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(16, 7))
-        self.logs = tk.Text(tab, height=6, state="disabled", bg=c["surface"], fg="#c6d6eb", relief="flat", insertbackground=c["text"], font=("Consolas", 10), padx=12, pady=10)
-        self.logs.pack(fill="both", expand=True)
+            actions = tk.Frame(card, bg=c["surface"])
+            actions.pack(fill="x")
+            tk.Label(actions, textvariable=value, bg=c["raised"], fg=c["accent"],
+                     font=("Aptos", 9), padx=8, pady=8).pack(side="left")
+            ttk.Button(actions, text="Select Area",
+                       command=lambda k=key, n=title: self.select_region(k, n)).pack(side="right")
+        panels = tk.Frame(tab, bg=c["bg"])
+        panels.pack(fill="both", expand=True)
+        panels.columnconfigure(0, weight=1, uniform="panels")
+        panels.columnconfigure(1, weight=1, uniform="panels")
+        live = tk.Frame(panels, bg=c["surface"], highlightbackground=c["edge"], highlightthickness=1)
+        live.grid(row=0, column=0, sticky="nsew", padx=(0, 7))
+        tk.Label(live, text="LIVE OCR", bg=c["surface"], fg=c["text"],
+                 font=("Aptos", 10, "bold")).pack(anchor="w", padx=14, pady=(12, 3))
+        tk.Label(live, text="Verify your name is read in the correct column.", bg=c["surface"],
+                 fg=c["muted"], font=("Aptos", 9)).pack(anchor="w", padx=14)
+        tk.Label(live, textvariable=self.ocr_str, bg=c["raised"], fg=c["accent"],
+                 anchor="w", justify="left", padx=12, pady=12, wraplength=340).pack(fill="x", padx=14, pady=12)
+        activity = tk.Frame(panels, bg=c["surface"], highlightbackground=c["edge"], highlightthickness=1)
+        activity.grid(row=0, column=1, sticky="nsew", padx=(7, 0))
+        tk.Label(activity, text="ACTIVITY LOG", bg=c["surface"], fg=c["text"],
+                 font=("Aptos", 10, "bold")).pack(anchor="w", padx=14, pady=(12, 7))
+        self.logs = tk.Text(activity, height=5, state="disabled", bg=c["surface"], fg=c["muted"],
+                            relief="flat", insertbackground=c["text"], font=("Consolas", 9),
+                            padx=10, pady=7, wrap="word", highlightthickness=0)
+        self.logs.pack(fill="both", expand=True, padx=6, pady=(0, 6))
 
     def _sounds_tab(self, tab):
         c = self.palette
@@ -564,7 +594,7 @@ class App(tk.Tk):
             row.pack(fill="x", pady=(0, 8), padx=(0, 8))
             badge = tk.Frame(row, bg=c["raised"], width=60)
             badge.pack(side="left", fill="y", padx=(0, 13))
-            tk.Label(badge, text=number, bg=c["raised"], fg=c["accent"], font=("Segoe UI", 19, "bold"), padx=14, pady=12).pack()
+            tk.Label(badge, text=number, bg=c["raised"], fg=c["accent"], font=("Aptos", 19, "bold"), padx=14, pady=12).pack()
             copy = tk.Frame(row, bg=c["surface"])
             copy.pack(side="left", fill="x", expand=True, pady=9)
             phrase = tk.StringVar(value=self.settings["phrases"].get(number, DEFAULT_EVENTS[number]))
@@ -572,7 +602,7 @@ class App(tk.Tk):
             ttk.Entry(copy, textvariable=phrase, width=25).pack(anchor="w", fill="x", padx=(0, 10))
             lab = tk.StringVar(value=Path(self.settings["sounds"].get(number, "")).name or "Windows voice · No audio file")
             self.sound_labels[number] = lab
-            tk.Label(copy, textvariable=lab, bg=c["surface"], fg=c["muted"], font=("Segoe UI", 9), anchor="w").pack(anchor="w", pady=(5, 0))
+            tk.Label(copy, textvariable=lab, bg=c["surface"], fg=c["muted"], font=("Aptos", 9), anchor="w").pack(anchor="w", pady=(5, 0))
             controls = tk.Frame(row, bg=c["surface"])
             controls.pack(side="right", padx=12)
             ttk.Button(controls, text="FILE", command=lambda k=number: self.choose_audio(k)).pack(side="left", padx=3)
@@ -586,13 +616,13 @@ class App(tk.Tk):
         panel.pack(fill="x", pady=(0, 12))
         body = tk.Frame(panel, bg=c["surface"])
         body.pack(fill="x", padx=20, pady=17)
-        tk.Label(body, text="SCREEN TEXT RECOGNITION", bg=c["surface"], fg=c["text"], font=("Segoe UI", 12, "bold")).pack(anchor="w")
-        tk.Label(body, text="Tesseract reads the attacker and victim columns of your kill feed. It doesn't modify game files.", bg=c["surface"], fg=c["muted"], font=("Segoe UI", 9), wraplength=760, justify="left").pack(anchor="w", pady=(5, 12))
+        tk.Label(body, text="SCREEN TEXT RECOGNITION", bg=c["surface"], fg=c["text"], font=("Aptos", 12, "bold")).pack(anchor="w")
+        tk.Label(body, text="Tesseract reads the attacker and victim columns of your kill feed. It doesn't modify game files.", bg=c["surface"], fg=c["muted"], font=("Aptos", 9), wraplength=760, justify="left").pack(anchor="w", pady=(5, 12))
         ocr_card = tk.Frame(body, bg=c["raised"], padx=12, pady=11)
         ocr_card.pack(fill="x", pady=(0, 13))
-        self.ocr_indicator = tk.Label(ocr_card, textvariable=self.ocr_status_var, bg=c["raised"], fg=c["warning"], font=("Segoe UI", 10, "bold"), anchor="w")
+        self.ocr_indicator = tk.Label(ocr_card, textvariable=self.ocr_status_var, bg=c["raised"], fg=c["warning"], font=("Aptos", 10, "bold"), anchor="w")
         self.ocr_indicator.pack(fill="x")
-        tk.Label(body, text="TESSERACT EXECUTABLE (OPTIONAL)", bg=c["surface"], fg=c["muted"], font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(0, 6))
+        tk.Label(body, text="TESSERACT EXECUTABLE (OPTIONAL)", bg=c["surface"], fg=c["muted"], font=("Aptos", 9, "bold")).pack(anchor="w", pady=(0, 6))
         line = tk.Frame(body, bg=c["surface"])
         line.pack(fill="x", pady=(0, 7))
         ttk.Entry(line, textvariable=self.tess_var).pack(side="left", fill="x", expand=True)
@@ -600,26 +630,26 @@ class App(tk.Tk):
         ttk.Button(line, text="AUTO DETECT", command=self.auto_detect_tesseract).pack(side="left", padx=(8, 0))
         help_line = tk.Frame(body, bg=c["surface"])
         help_line.pack(fill="x", pady=(0, 16))
-        tk.Label(help_line, text="Leave blank to use the built-in OCR engine, when available.", bg=c["surface"], fg=c["muted"], font=("Segoe UI", 9)).pack(side="left")
+        tk.Label(help_line, text="Leave blank to use the built-in OCR engine, when available.", bg=c["surface"], fg=c["muted"], font=("Aptos", 9)).pack(side="left")
         ttk.Button(help_line, text="TEST OCR", command=self.test_tesseract).pack(side="right")
         ttk.Button(help_line, text="⬇ INSTALL TESSERACT OCR", command=self.install_tesseract).pack(side="right", padx=8)
         ttk.Separator(body, orient="horizontal").pack(fill="x", pady=(1, 16))
-        tk.Label(body, text="DETECTION WORDS", bg=c["surface"], fg=c["text"], font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(0, 8))
+        tk.Label(body, text="DETECTION WORDS", bg=c["surface"], fg=c["text"], font=("Aptos", 12, "bold")).pack(anchor="w", pady=(0, 8))
         for title, desc, variable in [
             ("ELIMINATION KEYWORDS", "Words displayed when YOU eliminate another player (comma-separated).", self.keywords_str),
             ("DEATH KEYWORDS", "Words displayed when you die; used to reset your streak (comma-separated).", self.death_str),
         ]:
-            tk.Label(body, text=title, bg=c["surface"], fg=c["muted"], font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(2, 4))
+            tk.Label(body, text=title, bg=c["surface"], fg=c["muted"], font=("Aptos", 9, "bold")).pack(anchor="w", pady=(2, 4))
             ttk.Entry(body, textvariable=variable).pack(fill="x")
-            tk.Label(body, text=desc, bg=c["surface"], fg=c["muted"], font=("Segoe UI", 9), wraplength=740, justify="left").pack(anchor="w", pady=(4, 13))
+            tk.Label(body, text=desc, bg=c["surface"], fg=c["muted"], font=("Aptos", 9), wraplength=740, justify="left").pack(anchor="w", pady=(4, 13))
         ttk.Checkbutton(body, text="Only scan when Creative Destruction (client.exe) is running", variable=self.requires_game_var).pack(anchor="w", pady=(0, 8))
-        tk.Label(body, text="APPLICATION UPDATES", bg=c["surface"], fg=c["text"], font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(14, 6))
+        tk.Label(body, text="APPLICATION UPDATES", bg=c["surface"], fg=c["text"], font=("Aptos", 12, "bold")).pack(anchor="w", pady=(14, 6))
         ttk.Checkbutton(body, text="Automatically check for and install updates when the detector is idle", variable=self.auto_update_var, command=self.save).pack(anchor="w", pady=(0, 5))
-        tk.Label(body, text="Checks on startup. If a match is running, the upgrade waits until you stop detection. Your sounds and settings stay intact.", bg=c["surface"], fg=c["muted"], font=("Segoe UI", 9), wraplength=730, justify="left").pack(anchor="w", pady=(0, 10))
+        tk.Label(body, text="Checks on startup. If a match is running, the upgrade waits until you stop detection. Your sounds and settings stay intact.", bg=c["surface"], fg=c["muted"], font=("Aptos", 9), wraplength=730, justify="left").pack(anchor="w", pady=(0, 10))
         ttk.Button(body, text="↻  CHECK FOR UPDATES NOW", command=self.check_updates).pack(anchor="w", pady=(0, 12))
-        tk.Label(body, text="ANNOUNCER VOLUME", bg=c["surface"], fg=c["muted"], font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(4, 8))
+        tk.Label(body, text="ANNOUNCER VOLUME", bg=c["surface"], fg=c["muted"], font=("Aptos", 9, "bold")).pack(anchor="w", pady=(4, 8))
         ttk.Scale(body, variable=self.volume_var, from_=0, to=1, orient="horizontal").pack(fill="x")
-        tk.Label(tab, text="TIP  ·  If you change your screen resolution or HUD scale, recalibrate both regions on the Detection tab.", bg=c["bg"], fg=c["muted"], font=("Segoe UI", 9), wraplength=770, justify="left").pack(anchor="w", pady=8)
+        tk.Label(tab, text="TIP  ·  If you change your screen resolution or HUD scale, recalibrate both regions on the Detection tab.", bg=c["bg"], fg=c["muted"], font=("Aptos", 9), wraplength=770, justify="left").pack(anchor="w", pady=8)
 
     def refresh_ocr_status(self):
         path = find_tesseract(self.tess_var.get().strip())
@@ -829,7 +859,8 @@ class App(tk.Tk):
                 elif kind == "kill":
                     streak, gained = value
                     self.streak_str.set(str(streak))
-                    self.counter_str.set(str(streak))
+                    self.total_kills += gained
+                    self.counter_str.set(str(self.total_kills))
                     # One announcement per kill. After Godlike, pick a random high-tier
                     # voice without repeating the previous announcement back-to-back.
                     for kill_number in range(max(1, streak - gained + 1), streak + 1):
