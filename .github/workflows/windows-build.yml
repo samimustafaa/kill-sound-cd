@@ -1,0 +1,43 @@
+name: Build and release Windows app
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+      - name: Install Tesseract OCR
+        shell: pwsh
+        run: |
+          choco install tesseract --yes --no-progress
+          New-Item -ItemType Directory -Force -Path tesseract\tessdata | Out-Null
+          Copy-Item 'C:\Program Files\Tesseract-OCR\tesseract.exe' tesseract\
+          Copy-Item 'C:\Program Files\Tesseract-OCR\*.dll' tesseract\
+          Copy-Item 'C:\Program Files\Tesseract-OCR\tessdata\eng.traineddata' tesseract\tessdata\
+      - name: Package portable Windows app
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --windowed --onedir --name CD-Kill-Announcer --add-data 'tesseract;tesseract' --hidden-import win32com.client main.py
+          Compress-Archive -Path dist\CD-Kill-Announcer -DestinationPath CD-Kill-Announcer-Windows.zip -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CD-Kill-Announcer-Windows
+          path: CD-Kill-Announcer-Windows.zip
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: gh release create "${{ github.ref_name }}" CD-Kill-Announcer-Windows.zip --generate-notes
