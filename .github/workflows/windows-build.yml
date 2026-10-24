@@ -2,6 +2,8 @@ name: Build and release Windows app
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
 permissions:
@@ -36,8 +38,12 @@ jobs:
           name: CD-Kill-Announcer-Windows
           path: CD-Kill-Announcer-Windows.zip
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
-        run: gh release create "${{ github.ref_name }}" CD-Kill-Announcer-Windows.zip --generate-notes
+        run: |
+          $version = python -c "from updater import VERSION; print(VERSION)"
+          $tag = "v$version"
+          gh release view $tag --repo "${{ github.repository }}" *> $null
+          if ($LASTEXITCODE -eq 0) { Write-Host "Release $tag already exists"; exit 0 }
+          gh release create $tag CD-Kill-Announcer-Windows.zip --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "CD Kill Announcer $tag" --generate-notes
