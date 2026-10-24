@@ -9,6 +9,10 @@ import threading
 import time
 import subprocess
 import webbrowser
+import tempfile
+import urllib.request
+from html.parser import HTMLParser
+from urllib.parse import urljoin, urlparse
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -513,7 +517,7 @@ class App(tk.Tk):
         help_line.pack(fill="x", pady=(0, 16))
         tk.Label(help_line, text="Leave blank to use the built-in OCR engine, when available.", bg=c["surface"], fg=c["muted"], font=("Segoe UI", 9)).pack(side="left")
         ttk.Button(help_line, text="TEST OCR", command=self.test_tesseract).pack(side="right")
-        ttk.Button(help_line, text="INSTALL GUIDE ↗", command=self.open_tesseract_guide).pack(side="right", padx=8)
+        ttk.Button(help_line, text="⬇ INSTALL TESSERACT OCR", command=self.install_tesseract).pack(side="right", padx=8)
         ttk.Separator(body, orient="horizontal").pack(fill="x", pady=(1, 16))
         tk.Label(body, text="DETECTION WORDS", bg=c["surface"], fg=c["text"], font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(0, 8))
         for title, desc, variable in [
@@ -572,6 +576,73 @@ class App(tk.Tk):
             self.ocr_status_var.set("● OCR ERROR  •  Test failed")
             self.ocr_indicator.configure(fg=self.palette["warning"])
             messagebox.showerror("OCR test failed", str(exc))
+
+    def install_tesseract(self):
+        if sys.platform != "win32":
+            messagebox.showerror("Windows only", "The OCR installer is for Windows.")
+            return
+        if find_tesseract(self.tess_var.get().strip()):
+            if not messagebox.askyesno("OCR already available", "Tesseract is already available. Download the external installer anyway?"):
+                self.refresh_ocr_status()
+                return
+        elif not messagebox.askyesno("Install Tesseract OCR", "Download the Windows OCR installer from UB Mannheim?\n\nAfter downloading, Windows will open the installer so you can confirm installation. Leave the installation directory at its default location."):
+            return
+        self.ocr_status_var.set("● FETCHING OCR INSTALLER  •  Connecting...")
+        def download():
+            try:
+                class InstallerLinks(HTMLParser):
+                    def __init__(self):
+                        super().__init__()
+                        self.links = []
+                    def handle_starttag(self, tag, attrs):
+                        if tag == "a":
+                            href = dict(attrs).get("href", "")
+                            if re.fullmatch(r"tesseract-ocr-w64-setup-(?:v)?5[^/]*\.exe", href, re.I):
+                                self.links.append(href)
+                base = "https://digi.bib.uni-mannheim.de/tesseract/"
+                request = urllib.request.Request(base, headers={"User-Agent": "CDKillAnnouncer-OCR-Setup/1.0"})
+                with urllib.request.urlopen(request, timeout=20) as response:
+                    if urlparse(response.geturl()).hostname != "digi.bib.uni-mannheim.de":
+                        raise RuntimeError("Unexpected download source")
+                    html = response.read(1_000_000).decode("utf-8", "replace")
+                parser = InstallerLinks()
+                parser.feed(html)
+                if not parser.links:
+                    raise RuntimeError("No supported Windows Tesseract installer was found")
+                def version_key(name):
+                    nums = [int(x) for x in re.findall(r"\d+", name.split("setup-")[-1])]
+                    return tuple((nums + [0] * 6)[:6])
+                name = max(parser.links, key=version_key)
+                url = urljoin(base, name)
+                path = Path(tempfile.mkdtemp(prefix="cd-kill-ocr-")) / "Tesseract-OCR-Setup.exe"
+                req = urllib.request.Request(url, headers={"User-Agent": "CDKillAnnouncer-OCR-Setup/1.0"})
+                with urllib.request.urlopen(req, timeout=45) as response, path.open("wb") as stream:
+                    if urlparse(response.geturl()).hostname != "digi.bib.uni-mannheim.de":
+                        raise RuntimeError("Unexpected installer redirect")
+                    total = 0
+                    while chunk := response.read(1024 * 1024):
+                        total += len(chunk)
+                        if total > 200 * 1024 * 1024:
+                            raise RuntimeError("Download exceeds the allowed size")
+                        stream.write(chunk)
+                with path.open("rb") as stream:
+                    valid_exe = stream.read(2) == b"MZ"
+                if total < 1_000_000 or not valid_exe:
+                    raise RuntimeError("Downloaded installer is invalid")
+                self.after(0, lambda: self._finish_tesseract_download(str(path), name))
+            except Exception as exc:
+                detail = str(exc)
+                self.after(0, lambda: (self.refresh_ocr_status(), messagebox.showerror("OCR download failed", detail)))
+        threading.Thread(target=download, daemon=True).start()
+
+    def _finish_tesseract_download(self, path, filename):
+        self.ocr_status_var.set("● OCR DOWNLOADED  •  Installer ready")
+        if messagebox.askyesno("Install OCR", f"Downloaded {filename} from UB Mannheim.\n\nLaunch the installer now? Windows may request administrator approval.\n\nChoose the default install folder and include English language data."):
+            try:
+                os.startfile(path)
+                self.after(2000, self.refresh_ocr_status)
+            except OSError as exc:
+                messagebox.showerror("Installer could not launch", str(exc))
 
     def open_tesseract_guide(self):
         webbrowser.open("https://github.com/UB-Mannheim/tesseract/wiki")
