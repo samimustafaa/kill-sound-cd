@@ -354,6 +354,7 @@ class App(tk.Tk):
         self.configure(bg=c["bg"])
         self.geometry("1180x760")
         self.resizable(False, False)
+        self.after(100, self._apply_dark_titlebar)
         style = ttk.Style(self)
         style.theme_use("clam")
         style.configure("TFrame", background=c["bg"])
@@ -362,7 +363,8 @@ class App(tk.Tk):
         style.configure("Panel.TLabel", background=c["surface"], foreground=c["text"], font=("Aptos", 10))
         style.configure("Muted.TLabel", background=c["bg"], foreground=c["muted"], font=("Aptos", 10))
         style.configure("TEntry", fieldbackground=c["raised"], foreground=c["text"],
-                        insertcolor=c["text"], padding=9, borderwidth=1)
+                        insertcolor=c["text"], padding=9, borderwidth=0,
+                        relief="flat", lightcolor=c["edge"], darkcolor=c["edge"])
         style.configure("TButton", background=c["raised"], foreground=c["text"],
                         borderwidth=0, padding=(14, 10), font=("Aptos", 10, "bold"))
         style.map("TButton", background=[("active", "#30445a"), ("pressed", "#3c5670")])
@@ -388,7 +390,7 @@ class App(tk.Tk):
                  font=("Aptos", 11, "bold")).pack(anchor="w", pady=(8, 3))
         tk.Label(logo, text="by sg0hann", bg="#111115", fg=c["muted"],
                  font=("Aptos", 9)).pack(anchor="w")
-        tk.Frame(sidebar, bg="#293748", height=1).pack(fill="x", padx=18, pady=(0, 19))
+        tk.Frame(sidebar, bg="#28282e", height=1).pack(fill="x", padx=18, pady=(0, 19))
         tk.Label(sidebar, text="NAVIGATION", bg="#111115", fg="#7990aa",
                  font=("Aptos", 9, "bold")).pack(anchor="w", padx=19, pady=(0, 8))
 
@@ -483,7 +485,7 @@ class App(tk.Tk):
                  font=("Aptos", 8)).pack(anchor="w", pady=(18, 0))
 
         # Content pages use independent scroll areas; no clipping on shorter monitors.
-        self._detection_tab(self._scrollable_page(detection))
+        self._detection_tab(detection)
         self._sounds_tab(sounds)
         self._settings_tab(self._scrollable_page(settings))
 
@@ -507,25 +509,57 @@ class App(tk.Tk):
                 button.after(20, lambda: frame(step + 1))
         frame(1)
 
+    def _apply_dark_titlebar(self):
+        """Request Windows 10/11 immersive dark non-client title bar."""
+        if sys.platform != "win32":
+            return
+        try:
+            self.update_idletasks()
+            hwnd = ctypes.windll.user32.GetParent(self.winfo_id())
+            enabled = ctypes.c_int(1)
+            for attribute in (20, 19):
+                result = ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                    hwnd, attribute, ctypes.byref(enabled), ctypes.sizeof(enabled))
+                if result == 0:
+                    break
+        except (AttributeError, OSError, ValueError):
+            pass
+
     def _scrollable_page(self, parent):
-        canvas = tk.Canvas(parent, bg=self.palette["bg"], highlightthickness=0)
-        scroll = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
-        body = tk.Frame(canvas, bg=self.palette["bg"])
+        """Dark, auto-hiding scrollbar, reserved for the longer Settings page."""
+        canvas = tk.Canvas(parent, bg=self.palette["bg"], bd=0,
+                           highlightthickness=0, relief="flat")
+        scrollbar = tk.Scrollbar(parent, orient="vertical", command=canvas.yview,
+                                 bg="#303039", activebackground="#4a4a55",
+                                 troughcolor=self.palette["bg"], relief="flat",
+                                 bd=0, highlightthickness=0, width=9)
+        body = tk.Frame(canvas, bg=self.palette["bg"], bd=0, highlightthickness=0)
         window = canvas.create_window((0, 0), window=body, anchor="nw")
-        body.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(window, width=e.width))
-        canvas.configure(yscrollcommand=scroll.set)
+        canvas.configure(yscrollcommand=scrollbar.set)
         canvas.pack(side="left", fill="both", expand=True)
-        scroll.pack(side="right", fill="y")
+        visible = [False]
+        def sync(_event=None):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            if not canvas.winfo_height():
+                return
+            needs = body.winfo_reqheight() > canvas.winfo_height() + 2
+            if needs and not visible[0]:
+                scrollbar.pack(side="right", fill="y")
+                visible[0] = True
+            elif not needs and visible[0]:
+                scrollbar.pack_forget()
+                visible[0] = False
+                canvas.yview_moveto(0)
+        body.bind("<Configure>", sync)
+        canvas.bind("<Configure>", lambda e: (canvas.itemconfigure(window, width=e.width), sync()))
         def wheel(e):
-            canvas.yview_scroll(-int(e.delta / 120), "units")
-        # Bind wheel to content descendants when hovered, without intercepting
-        # mouse-wheel input from other tabs.
+            if visible[0]:
+                canvas.yview_scroll(-int(e.delta / 120), "units")
         def attach(widget):
             widget.bind("<MouseWheel>", wheel, add="+")
             for child in widget.winfo_children():
                 attach(child)
-        parent.after_idle(lambda: attach(body))
+        parent.after_idle(lambda: (attach(body), sync()))
         return body
 
     def _heading(self, parent, label, description):
@@ -535,18 +569,18 @@ class App(tk.Tk):
 
     def _detection_tab(self, tab):
         c = self.palette
-        self._heading(tab, "Kill Feed Setup", "Set your username and select the attacker / victim name columns from your screen.")
+        self._heading(tab, "Kill Feed Setup", "Your name on the left = kill. Your name on the right = death.")
         identity = tk.Frame(tab, bg=c["surface"], highlightbackground=c["edge"], highlightthickness=1)
-        identity.pack(fill="x", pady=(0, 12))
+        identity.pack(fill="x", pady=(0, 9))
         tk.Label(identity, text="YOUR IN-GAME NAME", bg=c["surface"], fg=c["text"],
                  font=("Aptos", 10, "bold")).pack(anchor="w", padx=16, pady=(12, 2))
         tk.Label(identity, text="This is the username that appears in your kill feed.", bg=c["surface"],
                  fg=c["muted"], font=("Aptos", 9)).pack(anchor="w", padx=16)
         ttk.Entry(identity, textvariable=self.player_name_var).pack(fill="x", padx=16, pady=(10, 9))
         tk.Label(identity, text="[ YOU ]  weapon  [ ENEMY ]   → KILL       |       [ ENEMY ]  weapon  [ YOU ]   → DEATH",
-                 bg=c["raised"], fg=c["accent"], font=("Aptos", 9), padx=12, pady=8).pack(fill="x", padx=16, pady=(0, 12))
+                 bg=c["raised"], fg=c["accent"], font=("Aptos", 9), padx=12, pady=7).pack(fill="x", padx=16, pady=(0, 10))
         regions = tk.Frame(tab, bg=c["bg"])
-        regions.pack(fill="x", pady=(0, 12))
+        regions.pack(fill="x", pady=(0, 9))
         regions.columnconfigure(0, weight=1, uniform="region")
         regions.columnconfigure(1, weight=1, uniform="region")
         self.region_labels = {}
