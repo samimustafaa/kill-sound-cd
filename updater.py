@@ -10,7 +10,7 @@ import threading
 import urllib.request
 import zipfile
 
-VERSION = '0.5.0'
+VERSION = '0.5.1'
 REPOSITORY = 'samimustafaa/kill-sound-cd'
 RELEASE_API = f'https://api.github.com/repos/{REPOSITORY}/releases/latest'
 ASSET_NAME = 'CD-Kill-Announcer-Setup.exe'
