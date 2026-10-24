@@ -408,10 +408,10 @@ class App(tk.Tk):
                         relief="flat", lightcolor=c["edge"], darkcolor=c["edge"])
         style.configure("TButton", background=c["raised"], foreground=c["text"],
                         borderwidth=0, padding=(14, 10), font=("Aptos", 10, "bold"))
-        style.map("TButton", background=[("active", "#30445a"), ("pressed", "#3c5670")])
+        style.map("TButton", background=[("active", "#313138"), ("pressed", "#393940")])
         style.configure("Accent.TButton", background=c["accent"], foreground="#071c22",
                         borderwidth=0, padding=(20, 13), font=("Aptos", 11, "bold"))
-        style.map("Accent.TButton", background=[("active", "#a1fff1"), ("pressed", "#55c8b9")])
+        style.map("Accent.TButton", background=[("active", "#62edce"), ("pressed", "#10bb9d")])
         style.configure("TCheckbutton", background=c["surface"], foreground=c["text"], font=("Aptos", 10))
         style.map("TCheckbutton", background=[("active", c["surface"])])
         style.configure("TScale", background=c["surface"], troughcolor=c["raised"])
@@ -426,8 +426,8 @@ class App(tk.Tk):
         sidebar.pack_propagate(False)
         logo = tk.Frame(sidebar, bg="#111115")
         logo.pack(fill="x", padx=16, pady=(22, 24))
-        tk.Label(logo, text="CD", bg="#111115", fg=c["accent"], font=("Aptos", 23, "bold")).pack(anchor="w")
-        tk.Label(logo, text="KILL ANNOUNCER", bg="#111115", fg=c["text"],
+        tk.Label(logo, text="CD", bg="#111115", fg=c["accent"], font=("Aptos", 20, "bold")).pack(anchor="w")
+        tk.Label(logo, text="Kill Announcer", bg="#111115", fg=c["text"],
                  font=("Aptos", 11, "bold")).pack(anchor="w", pady=(8, 3))
         tk.Label(logo, text="by sg0hann", bg="#111115", fg=c["muted"],
                  font=("Aptos", 9)).pack(anchor="w")
@@ -610,10 +610,10 @@ class App(tk.Tk):
 
     def _detection_tab(self, tab):
         c = self.palette
-        self._heading(tab, "Kill Feed Setup", "Your name on the left = kill. Your name on the right = death.")
+        self._heading(tab, "Kill Feed Setup", "Step 1: enter your name. Step 2: select both kill-feed name columns.")
         identity = tk.Frame(tab, bg=c["surface"], highlightbackground=c["edge"], highlightthickness=1)
         identity.pack(fill="x", pady=(0, 9))
-        tk.Label(identity, text="YOUR IN-GAME NAME", bg=c["surface"], fg=c["text"],
+        tk.Label(identity, text="1  ·  YOUR IN-GAME NAME", bg=c["surface"], fg=c["text"],
                  font=("Aptos", 10, "bold")).pack(anchor="w", padx=16, pady=(12, 2))
         tk.Label(identity, text="This is the username that appears in your kill feed.", bg=c["surface"],
                  fg=c["muted"], font=("Aptos", 9)).pack(anchor="w", padx=16)
@@ -649,7 +649,7 @@ class App(tk.Tk):
         panels.columnconfigure(1, weight=1, uniform="panels")
         live = tk.Frame(panels, bg=c["surface"], highlightbackground=c["edge"], highlightthickness=1)
         live.grid(row=0, column=0, sticky="nsew", padx=(0, 7))
-        tk.Label(live, text="LIVE OCR", bg=c["surface"], fg=c["text"],
+        tk.Label(live, text="LIVE TEXT RECOGNITION", bg=c["surface"], fg=c["text"],
                  font=("Aptos", 10, "bold")).pack(anchor="w", padx=14, pady=(12, 3))
         tk.Label(live, text="Verify your name is read in the correct column.", bg=c["surface"],
                  fg=c["muted"], font=("Aptos", 9)).pack(anchor="w", padx=14)
@@ -657,7 +657,7 @@ class App(tk.Tk):
                  anchor="w", justify="left", padx=12, pady=12, wraplength=340).pack(fill="x", padx=14, pady=12)
         activity = tk.Frame(panels, bg=c["surface"], highlightbackground=c["edge"], highlightthickness=1)
         activity.grid(row=0, column=1, sticky="nsew", padx=(7, 0))
-        tk.Label(activity, text="ACTIVITY LOG", bg=c["surface"], fg=c["text"],
+        tk.Label(activity, text="DETECTION HISTORY", bg=c["surface"], fg=c["text"],
                  font=("Aptos", 10, "bold")).pack(anchor="w", padx=14, pady=(12, 7))
         self.logs = tk.Text(activity, height=5, state="disabled", bg=c["surface"], fg=c["muted"],
                             relief="flat", insertbackground=c["text"], font=("Consolas", 9),
@@ -666,47 +666,60 @@ class App(tk.Tk):
 
     def _sounds_tab(self, tab):
         c = self.palette
-        self._heading(tab, "YOUR ANNOUNCER COLLECTION", "Customize every announcement. Use a voice line or select your own MP3, WAV, or OGG file.")
+        self._heading(tab, "Sound Library", "Assign a sound to each streak milestone. Preview it before you play.")
+        hint = tk.Frame(tab, bg="#12221f", padx=13, pady=10)
+        hint.pack(fill="x", pady=(0, 12))
+        tk.Label(hint, text="After 20 kills: Godlike, Dominating, Unstoppable, Killing Spree and Amazing Kill rotate randomly.",
+                 bg="#12221f", fg="#9bddcf", font=("Aptos", 9), anchor="w").pack(fill="x")
         container = tk.Frame(tab, bg=c["bg"])
         container.pack(fill="both", expand=True)
-        wrapper = tk.Canvas(container, bg=c["bg"], highlightthickness=0)
-        scrollbar = ttk.Scrollbar(container, orient="vertical", command=wrapper.yview)
+        wrapper = tk.Canvas(container, bg=c["bg"], bd=0, highlightthickness=0)
+        scrollbar = tk.Scrollbar(container, orient="vertical", command=wrapper.yview,
+                                 bg="#33333b", activebackground="#52525a",
+                                 troughcolor=c["bg"], bd=0, relief="flat", width=9)
         inner = tk.Frame(wrapper, bg=c["bg"])
         window_id = wrapper.create_window((0, 0), window=inner, anchor="nw")
-        inner.bind("<Configure>", lambda e: wrapper.configure(scrollregion=wrapper.bbox("all")))
+        def resize(event=None):
+            wrapper.configure(scrollregion=wrapper.bbox("all"))
+        inner.bind("<Configure>", resize)
         wrapper.bind("<Configure>", lambda e: wrapper.itemconfigure(window_id, width=e.width))
         wrapper.configure(yscrollcommand=scrollbar.set)
         wrapper.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
         def wheel(event):
             wrapper.yview_scroll(-int(event.delta / 120), "units")
-        wrapper.bind("<MouseWheel>", wheel)
-        inner.bind("<MouseWheel>", wheel)
         self.phrase_entries = {}
         self.sound_labels = {}
         for number in DEFAULT_EVENTS:
             row = tk.Frame(inner, bg=c["surface"], highlightthickness=1, highlightbackground=c["edge"])
-            row.pack(fill="x", pady=(0, 8), padx=(0, 8))
-            badge = tk.Frame(row, bg=c["raised"], width=60)
-            badge.pack(side="left", fill="y", padx=(0, 13))
-            tk.Label(badge, text=number, bg=c["raised"], fg=c["accent"], font=("Aptos", 19, "bold"), padx=14, pady=12).pack()
+            row.pack(fill="x", pady=(0, 7), padx=(0, 8))
+            tk.Label(row, text=number.zfill(2), bg=c["surface"], fg=c["accent"],
+                     font=("Aptos", 15, "bold"), width=4).pack(side="left", padx=(10, 4))
             copy = tk.Frame(row, bg=c["surface"])
-            copy.pack(side="left", fill="x", expand=True, pady=9)
+            copy.pack(side="left", fill="x", expand=True, pady=10)
             phrase = tk.StringVar(value=self.settings["phrases"].get(number, DEFAULT_EVENTS[number]))
             self.phrase_entries[number] = phrase
-            ttk.Entry(copy, textvariable=phrase, width=25).pack(anchor="w", fill="x", padx=(0, 10))
-            lab = tk.StringVar(value=Path(self.settings["sounds"].get(number, "")).name or "Windows voice · No audio file")
+            ttk.Entry(copy, textvariable=phrase).pack(fill="x", padx=(0, 10))
+            lab = tk.StringVar(value=Path(self.settings["sounds"].get(number, "")).name or "Windows voice · no file assigned")
             self.sound_labels[number] = lab
-            tk.Label(copy, textvariable=lab, bg=c["surface"], fg=c["muted"], font=("Aptos", 9), anchor="w").pack(anchor="w", pady=(5, 0))
+            tk.Label(copy, textvariable=lab, bg=c["surface"], fg=c["muted"], font=("Aptos", 9),
+                     anchor="w").pack(anchor="w", pady=(5, 0))
             controls = tk.Frame(row, bg=c["surface"])
-            controls.pack(side="right", padx=12)
-            ttk.Button(controls, text="FILE", command=lambda k=number: self.choose_audio(k)).pack(side="left", padx=3)
-            ttk.Button(controls, text="▶", command=lambda k=number: self.test_sound(k)).pack(side="left", padx=3)
-            ttk.Button(controls, text="×", command=lambda k=number: self.clear_audio(k)).pack(side="left", padx=3)
+            controls.pack(side="right", padx=10)
+            ttk.Button(controls, text="Choose file", command=lambda k=number: self.choose_audio(k)).pack(side="left", padx=3)
+            ttk.Button(controls, text="▶ Play", command=lambda k=number: self.test_sound(k)).pack(side="left", padx=3)
+            ttk.Button(controls, text="Clear", command=lambda k=number: self.clear_audio(k)).pack(side="left", padx=3)
+            def bind_wheel(widget):
+                widget.bind("<MouseWheel>", wheel, add="+")
+                for child in widget.winfo_children():
+                    bind_wheel(child)
+            bind_wheel(row)
+        wrapper.bind("<MouseWheel>", wheel, add="+")
+        inner.bind("<MouseWheel>", wheel, add="+")
 
     def _settings_tab(self, tab):
         c = self.palette
-        self._heading(tab, "PREFERENCES & UPDATES", "Configure screen recognition and your announcer experience.")
+        self._heading(tab, "Settings", "OCR, audio volume, and software updates.")
         panel = tk.Frame(tab, bg=c["surface"], highlightthickness=1, highlightbackground=c["edge"])
         panel.pack(fill="x", pady=(0, 12))
         body = tk.Frame(panel, bg=c["surface"])
