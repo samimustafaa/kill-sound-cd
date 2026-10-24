@@ -346,13 +346,13 @@ class App(tk.Tk):
 
     def _build(self):
         # Refined native desktop shell. Scanner, audio and update worker stay unchanged.
-        self.palette = {"bg": "#0b1018", "surface": "#141d2a", "raised": "#1d2b3c",
-                        "edge": "#2b3c51", "text": "#f2f6fc", "muted": "#92a3ba",
-                        "accent": "#6de7d6", "purple": "#bba8ff", "warning": "#f3c07a"}
+        self.palette = {"bg": "#0c121b", "surface": "#151e2a", "raised": "#1f2c3c",
+                        "edge": "#29374a", "text": "#eff5fb", "muted": "#94a6b8",
+                        "accent": "#19c9c3", "purple": "#9dadd1", "warning": "#e8b279"}
         c = self.palette
         self.configure(bg=c["bg"])
-        self.geometry("1150x780")
-        self.minsize(860, 580)
+        self.geometry("1060x690")
+        self.minsize(810, 540)
         style = ttk.Style(self)
         style.theme_use("clam")
         style.configure("TFrame", background=c["bg"])
@@ -377,47 +377,47 @@ class App(tk.Tk):
         root = tk.Frame(self, bg=c["bg"])
         root.pack(fill="both", expand=True)
 
-        sidebar = tk.Frame(root, bg="#101824", width=215)
+        sidebar = tk.Frame(root, bg="#101824", width=170)
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
         logo = tk.Frame(sidebar, bg="#101824")
-        logo.pack(fill="x", padx=19, pady=(24, 24))
-        tk.Label(logo, text="S /", bg="#101824", fg=c["accent"], font=("Segoe UI", 28, "bold")).pack(anchor="w")
+        logo.pack(fill="x", padx=16, pady=(22, 24))
+        tk.Label(logo, text="CD", bg="#101824", fg=c["accent"], font=("Segoe UI", 23, "bold")).pack(anchor="w")
         tk.Label(logo, text="KILL ANNOUNCER", bg="#101824", fg=c["text"],
-                 font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(8, 3))
-        tk.Label(logo, text="BY SG0HANN  ·  CD", bg="#101824", fg=c["muted"],
+                 font=("Segoe UI", 11, "bold")).pack(anchor="w", pady=(8, 3))
+        tk.Label(logo, text="by sg0hann", bg="#101824", fg=c["muted"],
                  font=("Segoe UI", 9)).pack(anchor="w")
         tk.Frame(sidebar, bg="#293748", height=1).pack(fill="x", padx=18, pady=(0, 19))
-        tk.Label(sidebar, text="WORKSPACE", bg="#101824", fg="#7990aa",
+        tk.Label(sidebar, text="NAVIGATION", bg="#101824", fg="#7990aa",
                  font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=19, pady=(0, 8))
 
         workspace = tk.Frame(root, bg=c["bg"])
-        workspace.pack(side="left", fill="both", expand=True, padx=19, pady=(17, 13))
+        workspace.pack(side="left", fill="both", expand=True, padx=17, pady=(15, 12))
         header = tk.Frame(workspace, bg=c["bg"])
-        header.pack(fill="x", pady=(0, 15))
+        header.pack(fill="x", pady=(0, 11))
         copy = tk.Frame(header, bg=c["bg"])
         copy.pack(side="left", fill="x", expand=True)
-        tk.Label(copy, text="COMMAND CENTER", bg=c["bg"], fg=c["text"],
-                 font=("Segoe UI", 21, "bold")).pack(anchor="w")
-        tk.Label(copy, text="Your highlights. Your voice. Every elimination.", bg=c["bg"],
+        tk.Label(copy, text="CD Kill Announcer", bg=c["bg"], fg=c["text"],
+                 font=("Segoe UI", 20, "bold")).pack(anchor="w")
+        tk.Label(copy, text="Personal kill-feed announcer  /  Creative Destruction", bg=c["bg"],
                  fg=c["muted"], font=("Segoe UI", 10)).pack(anchor="w", pady=(3, 0))
         tk.Label(header, text=f"  v{VERSION}  ", bg=c["raised"], fg=c["accent"],
                  font=("Segoe UI", 10, "bold"), padx=10, pady=9).pack(side="right")
 
         stats = tk.Frame(workspace, bg=c["bg"])
-        stats.pack(fill="x", pady=(0, 13))
+        stats.pack(side="bottom", fill="x", pady=(9, 0))
         for i, (label, var, fg, symbol) in enumerate([
-            ("DETECTOR STATUS", self.state_str, c["accent"], "◉"),
-            ("KILLS DETECTED", self.counter_str, c["text"], "⌖"),
+            ("GAME / DETECTOR", self.state_str, c["accent"], "◉"),
+            ("KILLS THIS STREAK", self.streak_str, c["text"], "⌖"),
             ("CURRENT STREAK", self.streak_str, c["purple"], "⚡")]):
             card = tk.Frame(stats, bg=c["surface"], highlightthickness=1,
                             highlightbackground=c["edge"])
             card.grid(row=0, column=i, sticky="nsew", padx=(0, 10) if i < 2 else 0)
             stats.columnconfigure(i, weight=1, uniform="stats")
             tk.Label(card, text=f"{symbol}   {label}", bg=c["surface"], fg=c["muted"],
-                     font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=15, pady=(13, 5))
+                     font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=13, pady=(8, 2))
             tk.Label(card, textvariable=var, bg=c["surface"], fg=fg,
-                     font=("Segoe UI", 22, "bold")).pack(anchor="w", padx=15, pady=(0, 14))
+                     font=("Segoe UI", 18, "bold")).pack(anchor="w", padx=13, pady=(0, 9))
 
         # Pack action dock before the expanding page container, so it is never hidden.
         dock = tk.Frame(workspace, bg=c["surface"], highlightthickness=1,
@@ -445,14 +445,14 @@ class App(tk.Tk):
             nav.select(index)
             for position, button in enumerate(self._nav_buttons):
                 active = position == index
-                button.configure(bg="#21384a" if active else "#101824",
+                button.configure(bg="#1c3a48" if active else "#101824",
                                  fg=c["accent"] if active else "#b9c8da")
-        pages = ("◉   LIVE DETECTION", "♫   SOUND LIBRARY", "⚙   SETTINGS")
+        pages = ("⌖   Dashboard", "♫   Sound Library", "⚙   Settings")
         for index, name in enumerate(pages):
             button = tk.Button(sidebar, text=name, anchor="w", relief="flat",
                                borderwidth=0, cursor="hand2", bg="#101824",
                                fg="#b9c8da", activebackground="#27475a",
-                               activeforeground="#a8fff4", padx=15, pady=13,
+                               activeforeground="#a8fff4", padx=11, pady=10,
                                font=("Segoe UI", 10, "bold"),
                                command=lambda idx=index: select_page(idx))
             button.pack(fill="x", padx=10, pady=3)
@@ -478,7 +478,7 @@ class App(tk.Tk):
         update_button.pack(fill="x")
         update_button.bind("<Enter>", lambda _e: update_button.configure(bg="#30566a"))
         update_button.bind("<Leave>", lambda _e: update_button.configure(bg="#223d49"))
-        tk.Label(update_panel, text="MADE BY SG0HANN", bg="#101824", fg="#71869f",
+        tk.Label(update_panel, text="SG0HANN  ·  DESKTOP", bg="#101824", fg="#71869f",
                  font=("Segoe UI", 8)).pack(anchor="w", pady=(18, 0))
 
         # Content pages use independent scroll areas; no clipping on shorter monitors.
@@ -509,15 +509,15 @@ class App(tk.Tk):
 
     def _heading(self, parent, label, description):
         c = self.palette
-        tk.Label(parent, text=label, bg=c["bg"], fg=c["text"], font=("Segoe UI", 16, "bold")).pack(anchor="w", pady=(6, 3))
+        tk.Label(parent, text=label, bg=c["bg"], fg=c["text"], font=("Segoe UI", 14, "bold")).pack(anchor="w", pady=(6, 3))
         tk.Label(parent, text=description, bg=c["bg"], fg=c["muted"], font=("Segoe UI", 10), wraplength=700, justify="left").pack(anchor="w", pady=(0, 17))
 
     def _detection_tab(self, tab):
         c = self.palette
-        self._heading(tab, "KILL FEED DETECTION", "No kill counter needed. Select two areas inside your kill feed: the ATTACKER names and the VICTIM names.")
-        name_row = tk.Frame(tab, bg=c["surface"], padx=18, pady=14)
+        self._heading(tab, "Kill feed setup", "Set your username and select the left attacker / right victim name columns.")
+        name_row = tk.Frame(tab, bg=c["surface"], padx=14, pady=10)
         name_row.pack(fill="x", pady=(0, 12))
-        tk.Label(name_row, text="YOUR EXACT IN-GAME NAME", bg=c["surface"], fg=c["text"], font=("Segoe UI", 10, "bold")).pack(anchor="w")
+        tk.Label(name_row, text="YOUR IN-GAME NAME", bg=c["surface"], fg=c["text"], font=("Segoe UI", 10, "bold")).pack(anchor="w")
         ttk.Entry(name_row, textvariable=self.player_name_var, width=38).pack(fill="x", pady=(8, 0))
         tk.Label(tab, text="Example:  [ YOU ]  weapon  [ ENEMY ] → kill   •   [ ENEMY ]  weapon  [ YOU ] → death",
                  bg=c["bg"], fg=c["accent"], font=("Segoe UI", 10)).pack(anchor="w", pady=(0, 12))
@@ -525,7 +525,7 @@ class App(tk.Tk):
         for index, (key, label, help_text) in enumerate([
             ("killer_region", "LEFT — ATTACKER NAMES", "Select the left-side name column in the kill feed only."),
             ("victim_region", "RIGHT — VICTIM NAMES", "Select the right-side name column in the same feed only.")]):
-            panel = tk.Frame(tab, bg=c["surface"], padx=16, pady=13, highlightbackground=c["edge"], highlightthickness=1)
+            panel = tk.Frame(tab, bg=c["surface"], padx=13, pady=9, highlightbackground=c["edge"], highlightthickness=1)
             panel.pack(fill="x", pady=(0, 10))
             tk.Label(panel, text=label, bg=c["surface"], fg=c["text"], font=("Segoe UI", 10, "bold")).pack(anchor="w")
             tk.Label(panel, text=help_text, bg=c["surface"], fg=c["muted"]).pack(anchor="w", pady=(3, 7))
