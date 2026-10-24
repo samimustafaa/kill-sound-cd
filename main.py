@@ -397,6 +397,12 @@ class App(tk.Tk):
             tk.Label(panel, textvariable=value, bg=c["surface"], fg=fg, font=("Segoe UI", 24, "bold")).pack(anchor="w", padx=18, pady=(0, 15))
         style.configure("Invisible.TNotebook", background=c["bg"], borderwidth=0, tabmargins=0)
         style.layout("Invisible.TNotebook.Tab", [])
+        # Persistent bottom action dock; pack before the expanding notebook so it cannot be clipped.
+        bottom = tk.Frame(workspace, bg=c["bg"])
+        bottom.pack(side="bottom", fill="x", pady=(12, 0))
+        self.start_btn = ttk.Button(bottom, text="▶   START DETECTION", style="Accent.TButton", command=self.toggle)
+        self.start_btn.pack(side="left", fill="x", expand=True, padx=(0, 12))
+        ttk.Button(bottom, text="SAVE SETTINGS", command=self.save).pack(side="right")
         nav = ttk.Notebook(workspace, style="Invisible.TNotebook")
         nav.pack(fill="both", expand=True)
         tab = tk.Frame(nav, bg=c["bg"])
@@ -423,11 +429,6 @@ class App(tk.Tk):
         self._sounds_tab(sound_tab)
         self._settings_tab(settings_tab)
         select_page(0)
-        bottom = tk.Frame(workspace, bg=c["bg"])
-        bottom.pack(fill="x", pady=(14, 0))
-        self.start_btn = ttk.Button(bottom, text="▶   START DETECTION", style="Accent.TButton", command=self.toggle)
-        self.start_btn.pack(side="left", fill="x", expand=True, padx=(0, 12))
-        ttk.Button(bottom, text="SAVE SETTINGS", command=self.save).pack(side="right")
     def _heading(self, parent, label, description):
         c = self.palette
         tk.Label(parent, text=label, bg=c["bg"], fg=c["text"], font=("Segoe UI", 16, "bold")).pack(anchor="w", pady=(6, 3))
