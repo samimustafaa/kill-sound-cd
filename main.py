@@ -121,7 +121,7 @@ def read_counter(sct, region):
 
 def read_message(sct, region):
     image = get_ocr_image(sct, region)
-    return "\\n".join(" ".join(line.split()) for line in pytesseract.image_to_string(image, config="--psm 6").lower().splitlines() if line.strip())
+    return "\n".join(" ".join(line.split()) for line in pytesseract.image_to_string(image, config="--psm 6").lower().splitlines() if line.strip())
 
 class AudioEngine:
     def __init__(self, events):
@@ -293,9 +293,13 @@ class KillDetector:
                     else:
                         if events:
                             self.emit(("log", "Ambiguous feed: name on both sides; ignored."))
-                    # Keep recent events to prevent duplicate sounds while feed entries linger.
+                    # Refresh visible rows, and re-arm only after a row disappears.
+                    active_keys = set(events) if len(active_sides) == 1 else set()
+                    for key in active_keys:
+                        if key in self.seen:
+                            self.seen[key] = now
                     for key, when in list(self.seen.items()):
-                        if now - when >= 12:
+                        if key not in active_keys and now - when >= 3:
                             del self.seen[key]
                 except Exception as exc:
                     self.emit(("log", f"Kill-feed scan error: {exc}"))
