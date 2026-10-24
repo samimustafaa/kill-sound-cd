@@ -229,7 +229,7 @@ class KillDetector:
         self.stop_event = threading.Event()
         self.thread = None
         self.streak = 0
-        self.active = {}  # (side, normalized name) -> missed scan count
+        self.active = {}  # event signature -> missed scan count
         self.last_game_check = -1000.0
         self.game_running = False
 
@@ -292,29 +292,42 @@ class KillDetector:
                     victim = read_message(sct, cfg["victim_region"])
                     self.emit(("ocr", "LEFT: " + (attacker[:90] or "—") +
                                      "  |  RIGHT: " + (victim[:90] or "—")))
+                    # Pair same-row attacker/victim names. The opponent gives each
+                    # feed entry a signature even when the player's name repeats.
+                    left_lines = attacker.splitlines()
+                    right_lines = victim.splitlines()
                     observed = set()
-                    for side, content in (("kill", attacker), ("death", victim)):
-                        for line in content.splitlines():
-                            if self.name_present(line, username):
-                                # OCR variants for the same on-screen username should not
-                                # trigger another announcement while the row remains visible.
-                                key = side
-                                observed.add(key)
-                                if key not in self.active:
-                                    if side == "death":
-                                        self.streak = 0
-                                        self.emit(("streak", 0))
-                                        self.emit(("log", "Death detected: " + line[:90]))
-                                    else:
-                                        self.streak += 1
-                                        self.emit(("kill", (self.streak, 1)))
-                                        self.emit(("log", "Kill detected: " + line[:90]))
-                    for key in observed:
-                        self.active[key] = 0
+                    candidates = []
+                    for row in range(max(len(left_lines), len(right_lines))):
+                        left = left_lines[row] if row < len(left_lines) else ""
+                        right = right_lines[row] if row < len(right_lines) else ""
+                        is_kill = self.name_present(left, username)
+                        is_death = self.name_present(right, username)
+                        if is_kill == is_death:
+                            continue
+                        side = "kill" if is_kill else "death"
+                        other = right if is_kill else left
+                        signature = (side, self.normalize(other) or f"row{row}")
+                        # Ignore identical signatures repeated within the same frame.
+                        if signature in observed:
+                            continue
+                        observed.add(signature)
+                        candidates.append((side, signature, left, right))
+                    for side, signature, left, right in candidates:
+                        if signature not in self.active:
+                            if side == "death":
+                                self.streak = 0
+                                self.emit(("streak", 0))
+                                self.emit(("log", "Death feed: " + left[:40] + " -> " + right[:40]))
+                            else:
+                                self.streak += 1
+                                self.emit(("kill", (self.streak, 1)))
+                                self.emit(("log", "Kill feed: " + left[:40] + " -> " + right[:40]))
+                        self.active[signature] = 0
                     for key in list(self.active):
                         if key not in observed:
                             self.active[key] += 1
-                            if self.active[key] >= 2:
+                            if self.active[key] >= 3:
                                 del self.active[key]
                 except Exception as exc:
                     self.emit(("log", f"Scan error: {exc}"))
