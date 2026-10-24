@@ -458,9 +458,9 @@ class App(tk.Tk):
                                command=lambda idx=index: select_page(idx))
             button.pack(fill="x", padx=10, pady=3)
             button.bind("<Enter>", lambda _e, b=button, idx=index:
-                        b.configure(bg="#202025") if self._active_page != idx else None)
+                        self._animate_nav(b, "#23232a") if self._active_page != idx else None)
             button.bind("<Leave>", lambda _e, b=button, idx=index:
-                        b.configure(bg="#111115") if self._active_page != idx else None)
+                        self._animate_nav(b, "#111115") if self._active_page != idx else None)
             self._nav_buttons.append(button)
         self._nav_buttons[0].configure(bg="#242429", fg=c["accent"])
 
@@ -486,6 +486,26 @@ class App(tk.Tk):
         self._detection_tab(self._scrollable_page(detection))
         self._sounds_tab(sounds)
         self._settings_tab(self._scrollable_page(settings))
+
+    def _animate_nav(self, button, target):
+        # Non-blocking, subtle 100ms hover transition with no additional dependencies.
+        target_rgb = tuple(int(target[i:i + 2], 16) for i in (1, 3, 5))
+        try:
+            color = button.cget("bg")
+            start_rgb = tuple(int(color[i:i + 2], 16) for i in (1, 3, 5))
+        except (ValueError, tk.TclError):
+            return
+        serial = getattr(button, "_hover_serial", 0) + 1
+        button._hover_serial = serial
+        def frame(step):
+            if not button.winfo_exists() or button._hover_serial != serial:
+                return
+            mix = step / 5
+            rgb = tuple(round(a + (b - a) * mix) for a, b in zip(start_rgb, target_rgb))
+            button.configure(bg="#" + "".join(f"{v:02x}" for v in rgb))
+            if step < 5:
+                button.after(20, lambda: frame(step + 1))
+        frame(1)
 
     def _scrollable_page(self, parent):
         canvas = tk.Canvas(parent, bg=self.palette["bg"], highlightthickness=0)
