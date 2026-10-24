@@ -7,6 +7,8 @@ import re
 import sys
 import threading
 import time
+import subprocess
+import webbrowser
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -316,7 +318,9 @@ class App(tk.Tk):
         self.requires_game_var = tk.BooleanVar(value=self.settings["requires_game"])
         self.volume_var = tk.DoubleVar(value=self.settings["volume"])
         self.tess_var = tk.StringVar(value=self.settings["tesseract"])
+        self.ocr_status_var = tk.StringVar(value="Checking OCR engine...")
         self._build()
+        self.after(300, self.refresh_ocr_status)
         self.after(2500, self.check_updates_silently)
         self.after(120, self.poll)
         self.protocol("WM_DELETE_WINDOW", self.close)
@@ -327,8 +331,8 @@ class App(tk.Tk):
                         "accent": "#6ce9db", "purple": "#af97ff", "warning": "#f8c47a"}
         c = self.palette
         self.configure(bg=c["bg"])
-        self.geometry("960x780")
-        self.minsize(780, 660)
+        self.geometry("1030x820")
+        self.minsize(820, 700)
         style = ttk.Style(self)
         style.theme_use("clam")
         style.configure("TFrame", background=c["bg"])
@@ -457,25 +461,85 @@ class App(tk.Tk):
 
     def _settings_tab(self, tab):
         c = self.palette
-        self._heading(tab, "PREFERENCES", "Fine-tune recognition, playback, and how the scanner runs.")
+        self._heading(tab, "APP SETTINGS", "Configure screen recognition and your announcer experience.")
         panel = tk.Frame(tab, bg=c["surface"], highlightthickness=1, highlightbackground=c["edge"])
         panel.pack(fill="x", pady=(0, 12))
         body = tk.Frame(panel, bg=c["surface"])
-        body.pack(fill="x", padx=19, pady=17)
-        for title, variable, browse in [
-            ("TESSERACT OCR PATH", self.tess_var, True),
-            ("ELIMINATION KEYWORDS", self.keywords_str, False),
-            ("DEATH KEYWORDS", self.death_str, False)]:
-            tk.Label(body, text=title, bg=c["surface"], fg=c["muted"], font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(2, 6))
-            line = tk.Frame(body, bg=c["surface"])
-            line.pack(fill="x", pady=(0, 16))
-            ttk.Entry(line, textvariable=variable).pack(side="left", fill="x", expand=True)
-            if browse:
-                ttk.Button(line, text="BROWSE", command=self.choose_tesseract).pack(side="left", padx=(8, 0))
-        ttk.Checkbutton(body, text="Only scan when Creative Destruction (client.exe) is running", variable=self.requires_game_var).pack(anchor="w", pady=(0, 12))
-        tk.Label(body, text="ANNOUNCER VOLUME", bg=c["surface"], fg=c["muted"], font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(5, 8))
+        body.pack(fill="x", padx=20, pady=17)
+        tk.Label(body, text="SCREEN TEXT RECOGNITION", bg=c["surface"], fg=c["text"], font=("Segoe UI", 12, "bold")).pack(anchor="w")
+        tk.Label(body, text="Tesseract reads the on-screen kill count and elimination banner. It doesn't modify game files.", bg=c["surface"], fg=c["muted"], font=("Segoe UI", 9), wraplength=760, justify="left").pack(anchor="w", pady=(5, 12))
+        ocr_card = tk.Frame(body, bg=c["raised"], padx=12, pady=11)
+        ocr_card.pack(fill="x", pady=(0, 13))
+        self.ocr_indicator = tk.Label(ocr_card, textvariable=self.ocr_status_var, bg=c["raised"], fg=c["warning"], font=("Segoe UI", 10, "bold"), anchor="w")
+        self.ocr_indicator.pack(fill="x")
+        tk.Label(body, text="TESSERACT EXECUTABLE (OPTIONAL)", bg=c["surface"], fg=c["muted"], font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(0, 6))
+        line = tk.Frame(body, bg=c["surface"])
+        line.pack(fill="x", pady=(0, 7))
+        ttk.Entry(line, textvariable=self.tess_var).pack(side="left", fill="x", expand=True)
+        ttk.Button(line, text="BROWSE", command=self.choose_tesseract).pack(side="left", padx=(8, 0))
+        ttk.Button(line, text="AUTO DETECT", command=self.auto_detect_tesseract).pack(side="left", padx=(8, 0))
+        help_line = tk.Frame(body, bg=c["surface"])
+        help_line.pack(fill="x", pady=(0, 16))
+        tk.Label(help_line, text="Leave blank to use the built-in OCR engine, when available.", bg=c["surface"], fg=c["muted"], font=("Segoe UI", 9)).pack(side="left")
+        ttk.Button(help_line, text="TEST OCR", command=self.test_tesseract).pack(side="right")
+        ttk.Button(help_line, text="INSTALL GUIDE ↗", command=self.open_tesseract_guide).pack(side="right", padx=8)
+        ttk.Separator(body, orient="horizontal").pack(fill="x", pady=(1, 16))
+        tk.Label(body, text="DETECTION WORDS", bg=c["surface"], fg=c["text"], font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(0, 8))
+        for title, desc, variable in [
+            ("ELIMINATION KEYWORDS", "Words displayed when YOU eliminate another player (comma-separated).", self.keywords_str),
+            ("DEATH KEYWORDS", "Words displayed when you die; used to reset your streak (comma-separated).", self.death_str),
+        ]:
+            tk.Label(body, text=title, bg=c["surface"], fg=c["muted"], font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(2, 4))
+            ttk.Entry(body, textvariable=variable).pack(fill="x")
+            tk.Label(body, text=desc, bg=c["surface"], fg=c["muted"], font=("Segoe UI", 9), wraplength=740, justify="left").pack(anchor="w", pady=(4, 13))
+        ttk.Checkbutton(body, text="Only scan when Creative Destruction (client.exe) is running", variable=self.requires_game_var).pack(anchor="w", pady=(0, 8))
+        tk.Label(body, text="ANNOUNCER VOLUME", bg=c["surface"], fg=c["muted"], font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(4, 8))
         ttk.Scale(body, variable=self.volume_var, from_=0, to=1, orient="horizontal").pack(fill="x")
-        tk.Label(tab, text="TIP  ·  Keep the same game resolution and HUD scale after calibration. Detection requires both signals.", bg=c["bg"], fg=c["muted"], font=("Segoe UI", 9), wraplength=690, justify="left").pack(anchor="w", pady=13)
+        tk.Label(tab, text="TIP  ·  If you change your screen resolution or HUD scale, recalibrate both regions on the Detection tab.", bg=c["bg"], fg=c["muted"], font=("Segoe UI", 9), wraplength=770, justify="left").pack(anchor="w", pady=8)
+
+    def refresh_ocr_status(self):
+        path = find_tesseract(self.tess_var.get().strip())
+        if path:
+            self.ocr_status_var.set("● OCR READY  •  " + ("Bundled engine" if "_MEIPASS" in dir(sys) and Path(path).is_relative_to(Path(sys._MEIPASS)) else Path(path).name))
+            self.ocr_indicator.configure(fg=self.palette["accent"])
+        else:
+            self.ocr_status_var.set("● OCR NOT FOUND  •  Install Tesseract or select tesseract.exe")
+            self.ocr_indicator.configure(fg=self.palette["warning"])
+
+    def auto_detect_tesseract(self):
+        self.tess_var.set("")
+        self.refresh_ocr_status()
+        if find_tesseract(""):
+            messagebox.showinfo("OCR available", "Tesseract was detected automatically. You don't need to set a path.")
+        else:
+            messagebox.showwarning("OCR missing", "Tesseract could not be located. Use INSTALL GUIDE for setup instructions.")
+
+    def test_tesseract(self):
+        path = find_tesseract(self.tess_var.get().strip())
+        if not path:
+            self.refresh_ocr_status()
+            messagebox.showerror("OCR missing", "No Tesseract executable was found. Install OCR or browse to tesseract.exe.")
+            return
+        try:
+            result = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=5, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            if result.returncode != 0:
+                raise RuntimeError((result.stderr or result.stdout or "Unknown error")[:300])
+            pytesseract.pytesseract.tesseract_cmd = path
+            from PIL import ImageDraw
+            sample = Image.new("RGB", (450, 100), "white")
+            ImageDraw.Draw(sample).text((25, 25), "KILLS 12", fill="black", stroke_width=0)
+            detected = pytesseract.image_to_string(sample, config="--psm 6")
+            if "12" not in detected:
+                raise RuntimeError("The OCR engine started, but did not recognize the sample. Check English language data.")
+            self.refresh_ocr_status()
+            messagebox.showinfo("OCR test passed", "Tesseract is ready!\n\nEngine: " + path + "\nSample reading: " + detected.strip())
+        except Exception as exc:
+            self.ocr_status_var.set("● OCR ERROR  •  Test failed")
+            self.ocr_indicator.configure(fg=self.palette["warning"])
+            messagebox.showerror("OCR test failed", str(exc))
+
+    def open_tesseract_guide(self):
+        webbrowser.open("https://github.com/UB-Mannheim/tesseract/wiki")
 
     def select_region(self, key, label):
         if self.detector:
@@ -516,6 +580,7 @@ class App(tk.Tk):
         file = filedialog.askopenfilename(filetypes=[("Executable", "*.exe")])
         if file:
             self.tess_var.set(file)
+            self.refresh_ocr_status()
 
     def save(self):
         self.settings["tesseract"] = self.tess_var.get().strip()
