@@ -43,7 +43,7 @@ DEFAULTS = {
     "tesseract": "", "keywords": "eliminated,killed,defeated,elimination",
     "death_keywords": "eliminated by,you died,you were eliminated",
     "volume": 0.9, "poll_interval": 0.40, "requires_game": True,
-    "phrases": DEFAULT_EVENTS.copy(), "sounds": {}, "active": False,
+    "phrases": DEFAULT_EVENTS.copy(), "sounds": {}, "active": False, "auto_update": True,
 }
 
 def asset_path(name):
@@ -319,6 +319,10 @@ class App(tk.Tk):
         self.volume_var = tk.DoubleVar(value=self.settings["volume"])
         self.tess_var = tk.StringVar(value=self.settings["tesseract"])
         self.ocr_status_var = tk.StringVar(value="Checking OCR engine...")
+        self.auto_update_var = tk.BooleanVar(value=self.settings.get("auto_update", True))
+        self.update_status_var = tk.StringVar(value=f"VERSION {VERSION}  ·  UPDATE CHECK PENDING")
+        self.update_busy = False
+        self.pending_update = None
         self._build()
         self.after(300, self.refresh_ocr_status)
         self.after(2500, self.check_updates_silently)
@@ -331,8 +335,8 @@ class App(tk.Tk):
                         "accent": "#6ce9db", "purple": "#af97ff", "warning": "#f8c47a"}
         c = self.palette
         self.configure(bg=c["bg"])
-        self.geometry("1030x820")
-        self.minsize(820, 700)
+        self.geometry("1110x850")
+        self.minsize(880, 700)
         style = ttk.Style(self)
         style.theme_use("clam")
         style.configure("TFrame", background=c["bg"])
@@ -352,7 +356,7 @@ class App(tk.Tk):
         style.configure("TNotebook.Tab", background=c["surface"], foreground=c["muted"], padding=(26, 13), borderwidth=0, font=("Segoe UI", 10, "bold"))
         style.map("TNotebook.Tab", background=[("selected", c["raised"]), ("active", "#203149")], foreground=[("selected", c["accent"]), ("active", c["text"])])
         shell = tk.Frame(self, bg=c["bg"])
-        shell.pack(fill="both", expand=True, padx=28, pady=22)
+        shell.pack(fill="both", expand=True, padx=32, pady=23)
         head = tk.Frame(shell, bg=c["bg"])
         head.pack(fill="x", pady=(0, 20))
         logo = tk.Canvas(head, width=52, height=52, bg=c["bg"], highlightthickness=0)
@@ -364,7 +368,10 @@ class App(tk.Tk):
         title_box.pack(side="left")
         tk.Label(title_box, text="KILL ANNOUNCER", bg=c["bg"], fg=c["text"], font=("Segoe UI", 23, "bold")).pack(anchor="w")
         tk.Label(title_box, text=f"CREATIVE DESTRUCTION     /     SG0HANN     /     v{VERSION}", bg=c["bg"], fg=c["muted"], font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(2, 0))
-        tk.Label(head, text="●   LOCAL HUD DETECTION", bg=c["surface"], fg=c["accent"], padx=14, pady=10, font=("Segoe UI", 9, "bold")).pack(side="right")
+        actions = tk.Frame(head, bg=c["bg"])
+        actions.pack(side="right")
+        ttk.Button(actions, text="↻  CHECK FOR UPDATES", command=self.check_updates).pack(anchor="e")
+        tk.Label(actions, textvariable=self.update_status_var, bg=c["bg"], fg=c["muted"], font=("Segoe UI", 9), anchor="e").pack(anchor="e", pady=(6, 0))
         stats = tk.Frame(shell, bg=c["bg"])
         stats.pack(fill="x", pady=(0, 18))
         for i, (label, value, fg) in enumerate([("DETECTOR STATUS", self.state_str, c["accent"]), ("KILL COUNTER", self.counter_str, c["text"]), ("CURRENT STREAK", self.streak_str, c["purple"]) ]):
@@ -389,7 +396,7 @@ class App(tk.Tk):
         self.start_btn = ttk.Button(bottom, text="▶  START DETECTION", style="Accent.TButton", command=self.toggle)
         self.start_btn.pack(side="left", fill="x", expand=True, padx=(0, 10))
         ttk.Button(bottom, text="SAVE CHANGES", command=self.save).pack(side="left", padx=(0, 10))
-        ttk.Button(bottom, text="↻  CHECK UPDATES", command=self.check_updates).pack(side="left")
+        tk.Label(bottom, text="SCREEN-ONLY DETECTION  ·  NO GAME FILE MODIFICATIONS", bg=c["bg"], fg=c["muted"], font=("Segoe UI", 8)).pack(side="right")
 
     def _heading(self, parent, label, description):
         c = self.palette
@@ -493,6 +500,10 @@ class App(tk.Tk):
             ttk.Entry(body, textvariable=variable).pack(fill="x")
             tk.Label(body, text=desc, bg=c["surface"], fg=c["muted"], font=("Segoe UI", 9), wraplength=740, justify="left").pack(anchor="w", pady=(4, 13))
         ttk.Checkbutton(body, text="Only scan when Creative Destruction (client.exe) is running", variable=self.requires_game_var).pack(anchor="w", pady=(0, 8))
+        tk.Label(body, text="APPLICATION UPDATES", bg=c["surface"], fg=c["text"], font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(14, 6))
+        ttk.Checkbutton(body, text="Automatically check for and install updates when the detector is idle", variable=self.auto_update_var, command=self.save).pack(anchor="w", pady=(0, 5))
+        tk.Label(body, text="Checks on startup. If a match is running, the upgrade waits until you stop detection. Your sounds and settings stay intact.", bg=c["surface"], fg=c["muted"], font=("Segoe UI", 9), wraplength=730, justify="left").pack(anchor="w", pady=(0, 10))
+        ttk.Button(body, text="↻  CHECK FOR UPDATES NOW", command=self.check_updates).pack(anchor="w", pady=(0, 12))
         tk.Label(body, text="ANNOUNCER VOLUME", bg=c["surface"], fg=c["muted"], font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(4, 8))
         ttk.Scale(body, variable=self.volume_var, from_=0, to=1, orient="horizontal").pack(fill="x")
         tk.Label(tab, text="TIP  ·  If you change your screen resolution or HUD scale, recalibrate both regions on the Detection tab.", bg=c["bg"], fg=c["muted"], font=("Segoe UI", 9), wraplength=770, justify="left").pack(anchor="w", pady=8)
@@ -587,6 +598,7 @@ class App(tk.Tk):
         self.settings["keywords"] = self.keywords_str.get().strip()
         self.settings["death_keywords"] = self.death_str.get().strip()
         self.settings["requires_game"] = self.requires_game_var.get()
+        self.settings["auto_update"] = self.auto_update_var.get()
         self.settings["volume"] = round(self.volume_var.get(), 2)
         self.settings["phrases"] = {k: v.get() for k, v in self.phrase_entries.items()}
         save_settings(self.settings)
@@ -597,6 +609,10 @@ class App(tk.Tk):
             self.detector = None
             self.state_str.set("IDLE")
             self.start_btn.configure(text="▶  START DETECTION")
+            if self.pending_update and self.auto_update_var.get():
+                update = self.pending_update
+                self.pending_update = None
+                self.after(250, lambda: self._start_install(*update))
             return
         self.save()
         if not self.settings["counter_region"] or not self.settings["message_region"]:
@@ -651,39 +667,72 @@ class App(tk.Tk):
         self._check_updates(silent=False)
 
     def _check_updates(self, silent=False):
+        if self.update_busy:
+            if not silent:
+                messagebox.showinfo("Updates", "An update check or installation is already running.")
+            return
+        self.update_busy = True
+        self.update_status_var.set("CHECKING GITHUB RELEASES…")
         def worker():
             try:
                 latest = get_latest()
                 self.after(0, lambda: self._update_result(latest, silent))
             except Exception as error:
-                if not silent:
-                    msg = str(error)
-                    self.after(0, lambda: messagebox.showerror("Update check", msg))
+                msg = str(error)
+                self.after(0, lambda: self._update_check_error(msg, silent))
         threading.Thread(target=worker, daemon=True).start()
 
+    def _update_check_error(self, message, silent):
+        self.update_busy = False
+        self.update_status_var.set("UPDATE CHECK FAILED  ·  TRY AGAIN")
+        if not silent:
+            messagebox.showerror("Update check", message)
+
     def _update_result(self, latest, silent):
+        self.update_busy = False
         if latest is None:
+            self.update_status_var.set(f"VERSION {VERSION}  ·  UP TO DATE")
             if not silent:
-                messagebox.showinfo("Updates", "You already have the latest version.")
+                messagebox.showinfo("Updates", f"You're up to date (v{VERSION}).")
             return
         version, asset_url = latest
+        self.update_status_var.set(f"NEW VERSION AVAILABLE  ·  {version}")
         if not getattr(sys, 'frozen', False):
             if not silent:
-                messagebox.showinfo("Update available", f"{version} is available. Install a release build to enable automatic updates.")
+                messagebox.showinfo("Update available", f"{version} is available. Use the Windows release build to enable automatic installations.")
             return
-        if not messagebox.askyesno("Update available", f"CD Kill Announcer {version} is available.\n\nDownload, install and restart automatically?\nYour settings and sounds will be preserved."):
+        if silent:
+            if not self.auto_update_var.get():
+                return
+            if self.detector:
+                self.pending_update = (version, asset_url)
+                self.update_status_var.set(f"{version} READY  ·  INSTALL AFTER MATCH")
+                return
+            self._start_install(version, asset_url)
             return
+        if messagebox.askyesno("Update available", f"CD Kill Announcer {version} is available.\n\nDownload, install, and restart automatically?\nYour settings and sounds will be preserved."):
+            self._start_install(version, asset_url)
+
+    def _start_install(self, version, asset_url):
+        if self.update_busy:
+            return
+        self.update_busy = True
         if self.detector:
             self.detector.stop()
             self.detector = None
         self.save()
+        self.update_status_var.set(f"INSTALLING {version}  ·  DO NOT CLOSE")
         def worker():
             try:
-                install_update(asset_url, lambda text: self.messages.put(("log", text)))
+                install_update(asset_url, lambda message: self.messages.put(("log", message)))
                 self.after(0, self.close)
             except Exception as error:
                 message = str(error)
-                self.after(0, lambda: messagebox.showerror("Update failed", message))
+                def failed():
+                    self.update_busy = False
+                    self.update_status_var.set("UPDATE FAILED  ·  RETRY")
+                    messagebox.showerror("Update failed", message)
+                self.after(0, failed)
         threading.Thread(target=worker, daemon=True).start()
 
     def close(self):
