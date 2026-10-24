@@ -3,6 +3,7 @@ import ctypes
 import json
 import os
 import queue
+import random
 import re
 import sys
 import threading
@@ -42,6 +43,12 @@ DEFAULT_EVENTS = {
     "5": "Amazing Kill!", "6": "Ultra Kill!", "7": "Monster Kill!", "8": "Killing Spree!",
     "10": "Unstoppable!", "15": "Dominating!", "20": "Godlike!",
 }
+# Exactly one configured voice/sound is selected per confirmed kill.
+# In-between milestones rotate through existing sounds without repeating consecutively.
+KILL_SOUND_SEQUENCE = ["1", "2", "3", "4", "5", "6", "7", "8", "5", "10",
+                       "6", "7", "8", "5", "15", "6", "7", "8", "10", "20"]
+POST_GODLIKE_SOUNDS = ("20", "15", "10", "8", "5")
+
 DEFAULTS = {
     "counter_region": None, "message_region": None, "death_region": None,
     "killer_region": None, "victim_region": None, "player_name": "",
@@ -312,6 +319,8 @@ class App(tk.Tk):
         self.settings = load_settings()
         self.messages = queue.Queue()
         self.audio = AudioEngine(self.messages)
+        self.last_announced_tier = None
+        self.last_announced_streak = 0
         self.detector = None
         self.state_str = tk.StringVar(value="IDLE")
         self.counter_str = tk.StringVar(value="—")
@@ -341,8 +350,8 @@ class App(tk.Tk):
                         "accent": "#6ce9db", "purple": "#af97ff", "warning": "#f8c47a"}
         c = self.palette
         self.configure(bg=c["bg"])
-        self.geometry("1210x825")
-        self.minsize(970, 690)
+        self.geometry("1120x760")
+        self.minsize(850, 580)
         style = ttk.Style(self)
         style.theme_use("clam")
         style.configure("TFrame", background=c["bg"])
@@ -365,7 +374,7 @@ class App(tk.Tk):
         self.configure(bg="#080d16")
         root = tk.Frame(self, bg="#080d16")
         root.pack(fill="both", expand=True)
-        sidebar = tk.Frame(root, bg="#101a2b", width=240)
+        sidebar = tk.Frame(root, bg="#101a2b", width=208)
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
         brand = tk.Frame(sidebar, bg="#101a2b")
@@ -376,16 +385,16 @@ class App(tk.Tk):
         tk.Frame(sidebar, bg="#28364b", height=1).pack(fill="x", padx=18, pady=(0, 25))
         tk.Label(sidebar, text="WORKSPACE", bg="#101a2b", fg="#7289a8", font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=23, pady=(0, 11))
         workspace = tk.Frame(root, bg=c["bg"])
-        workspace.pack(side="left", fill="both", expand=True, padx=28, pady=22)
+        workspace.pack(side="left", fill="both", expand=True, padx=16, pady=12)
         top = tk.Frame(workspace, bg=c["bg"])
-        top.pack(fill="x", pady=(0, 18))
-        tk.Label(top, text="COMMAND CENTER", bg=c["bg"], fg=c["text"], font=("Segoe UI", 23, "bold")).pack(anchor="w")
+        top.pack(fill="x", pady=(0, 8))
+        tk.Label(top, text="COMMAND CENTER", bg=c["bg"], fg=c["text"], font=("Segoe UI", 19, "bold")).pack(anchor="w")
         tk.Label(top, text="Fine-tune your highlights. Hear every elimination.", bg=c["bg"], fg=c["muted"], font=("Segoe UI", 10)).pack(anchor="w", pady=(3, 0))
         version = tk.Frame(top, bg=c["bg"])
         version.place(relx=1.0, x=0, y=2, anchor="ne")
         tk.Label(version, text=f"VERSION {VERSION}", bg=c["raised"], fg=c["accent"], font=("Segoe UI", 9, "bold"), padx=13, pady=8).pack(anchor="e")
         stats = tk.Frame(workspace, bg=c["bg"])
-        stats.pack(fill="x", pady=(8, 20))
+        stats.pack(fill="x", pady=(3, 10))
         for i, (label, value, fg, icon) in enumerate([
             ("DETECTOR", self.state_str, c["accent"], "◉"),
             ("KILLS", self.counter_str, c["text"], "⌖"),
@@ -393,8 +402,8 @@ class App(tk.Tk):
             panel = tk.Frame(stats, bg=c["surface"], highlightbackground=c["edge"], highlightthickness=1)
             panel.grid(row=0, column=i, sticky="nsew", padx=(0, 12) if i < 2 else 0)
             stats.columnconfigure(i, weight=1, uniform="stats")
-            tk.Label(panel, text=f"{icon}   {label}", bg=c["surface"], fg=c["muted"], font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=18, pady=(14, 5))
-            tk.Label(panel, textvariable=value, bg=c["surface"], fg=fg, font=("Segoe UI", 24, "bold")).pack(anchor="w", padx=18, pady=(0, 15))
+            tk.Label(panel, text=f"{icon}   {label}", bg=c["surface"], fg=c["muted"], font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=13, pady=(9, 3))
+            tk.Label(panel, textvariable=value, bg=c["surface"], fg=fg, font=("Segoe UI", 19, "bold")).pack(anchor="w", padx=13, pady=(0, 8))
         style.configure("Invisible.TNotebook", background=c["bg"], borderwidth=0, tabmargins=0)
         style.layout("Invisible.TNotebook.Tab", [])
         # Persistent bottom action dock; pack before the expanding notebook so it cannot be clipped.
@@ -425,10 +434,35 @@ class App(tk.Tk):
         tk.Label(sidebar, textvariable=self.update_status_var, bg="#101a2b", fg=c["accent"], font=("Segoe UI", 9), wraplength=190, justify="left").pack(anchor="w", padx=23, pady=(10, 14))
         tk.Button(sidebar, text="↻   CHECK FOR UPDATES", command=self.check_updates, bg="#294357", fg="#bafbf2", activebackground="#345b70", activeforeground="white", relief="flat", bd=0, padx=14, pady=12, cursor="hand2", font=("Segoe UI", 9, "bold")).pack(fill="x", padx=16)
         tk.Label(sidebar, text="Made by sg0hann", bg="#101a2b", fg="#7289a8", font=("Segoe UI", 9)).pack(side="bottom", anchor="w", padx=22, pady=24)
-        self._detection_tab(tab)
+        # Scrollable page interiors prevent buttons and settings from being
+        # clipped at 100–150% Windows scaling or on shorter displays.
+        detection_body = self._scrollable_page(tab)
+        settings_body = self._scrollable_page(settings_tab)
+        self._detection_tab(detection_body)
         self._sounds_tab(sound_tab)
-        self._settings_tab(settings_tab)
+        self._settings_tab(settings_body)
         select_page(0)
+    def _scrollable_page(self, parent):
+        canvas = tk.Canvas(parent, bg=self.palette["bg"], highlightthickness=0)
+        scroll = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        body = tk.Frame(canvas, bg=self.palette["bg"])
+        window = canvas.create_window((0, 0), window=body, anchor="nw")
+        body.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(window, width=e.width))
+        canvas.configure(yscrollcommand=scroll.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+        def wheel(e):
+            canvas.yview_scroll(-int(e.delta / 120), "units")
+        # Bind wheel to content descendants when hovered, without intercepting
+        # mouse-wheel input from other tabs.
+        def attach(widget):
+            widget.bind("<MouseWheel>", wheel, add="+")
+            for child in widget.winfo_children():
+                attach(child)
+        parent.after_idle(lambda: attach(body))
+        return body
+
     def _heading(self, parent, label, description):
         c = self.palette
         tk.Label(parent, text=label, bg=c["bg"], fg=c["text"], font=("Segoe UI", 16, "bold")).pack(anchor="w", pady=(6, 3))
@@ -509,7 +543,7 @@ class App(tk.Tk):
         body = tk.Frame(panel, bg=c["surface"])
         body.pack(fill="x", padx=20, pady=17)
         tk.Label(body, text="SCREEN TEXT RECOGNITION", bg=c["surface"], fg=c["text"], font=("Segoe UI", 12, "bold")).pack(anchor="w")
-        tk.Label(body, text="Tesseract reads the on-screen kill count and elimination banner. It doesn't modify game files.", bg=c["surface"], fg=c["muted"], font=("Segoe UI", 9), wraplength=760, justify="left").pack(anchor="w", pady=(5, 12))
+        tk.Label(body, text="Tesseract reads the attacker and victim columns of your kill feed. It doesn't modify game files.", bg=c["surface"], fg=c["muted"], font=("Segoe UI", 9), wraplength=760, justify="left").pack(anchor="w", pady=(5, 12))
         ocr_card = tk.Frame(body, bg=c["raised"], padx=12, pady=11)
         ocr_card.pack(fill="x", pady=(0, 13))
         self.ocr_indicator = tk.Label(ocr_card, textvariable=self.ocr_status_var, bg=c["raised"], fg=c["warning"], font=("Segoe UI", 10, "bold"), anchor="w")
@@ -746,14 +780,23 @@ class App(tk.Tk):
                     self.ocr_str.set(value)
                 elif kind == "streak":
                     self.streak_str.set(str(value))
+                    if value == 0:
+                        self.last_announced_tier = None
                 elif kind == "kill":
                     streak, gained = value
                     self.streak_str.set(str(streak))
-                    eligible = [int(k) for k in self.settings["phrases"] if int(k) <= streak]
-                    if eligible:
-                        tier = str(max(eligible))
-                        self.audio.say(self.settings["phrases"][tier], self.settings["sounds"].get(tier, ""), self.settings["volume"])
-                        self.log(f"Confirmed +{gained} kill(s) → {self.settings['phrases'][tier]} (streak {streak})")
+                    # One announcement per kill. After Godlike, pick a random high-tier
+                    # voice without repeating the previous announcement back-to-back.
+                    for kill_number in range(max(1, streak - gained + 1), streak + 1):
+                        if kill_number <= len(KILL_SOUND_SEQUENCE):
+                            tier = KILL_SOUND_SEQUENCE[kill_number - 1]
+                        else:
+                            choices = [x for x in POST_GODLIKE_SOUNDS if x != self.last_announced_tier]
+                            tier = random.choice(choices or list(POST_GODLIKE_SOUNDS))
+                        self.audio.say(self.settings["phrases"][tier],
+                                       self.settings["sounds"].get(tier, ""), self.settings["volume"])
+                        self.last_announced_tier = tier
+                        self.log(f"Kill {kill_number} → {self.settings['phrases'][tier]}")
                 elif kind == "error":
                     self.log(value)
                     self.toggle() if self.detector else None
