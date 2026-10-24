@@ -132,51 +132,66 @@ def read_message(sct, region):
     return "\n".join(" ".join(line.split()) for line in pytesseract.image_to_string(image, config="--psm 6", timeout=1.5).lower().splitlines() if line.strip())
 
 class AudioEngine:
+    """Play configured sounds immediately; keep voice fallback separate."""
     def __init__(self, events):
         self.events = events
         self.q = queue.Queue()
         self.ready = threading.Event()
-        self.worker = threading.Thread(target=self._loop, daemon=True)
-        self.worker.start()
-
-    def say(self, phrase, sound_path, volume):
-        self.q.put((phrase, sound_path, volume))
-
-    def _loop(self):
-        import pyttsx3
-        voice_engine = None
+        self.mixer_ready = False
+        self.cache = {}
         try:
             if pygame:
                 pygame.mixer.init()
+                pygame.mixer.set_num_channels(8)
+                self.mixer_ready = True
         except Exception as exc:
             self.events.put(("log", f"Audio mixer unavailable: {exc}"))
+        self.worker = threading.Thread(target=self._voice_loop, daemon=True)
+        self.worker.start()
+
+    def say(self, phrase, sound_path, volume):
+        if sound_path and Path(sound_path).is_file() and self.mixer_ready:
+            try:
+                path = str(Path(sound_path).resolve())
+                stamp = Path(path).stat().st_mtime_ns
+                if path not in self.cache or self.cache[path][0] != stamp:
+                    self.cache[path] = (stamp, pygame.mixer.Sound(path))
+                channel = pygame.mixer.find_channel(force=True)
+                channel.set_volume(float(volume))
+                channel.play(self.cache[path][1])
+                return
+            except Exception as exc:
+                self.events.put(("log", f"Custom sound error: {exc}; using Windows voice"))
+        # Discard stale queued speech rather than letting announcements lag.
+        while True:
+            try:
+                self.q.get_nowait()
+            except queue.Empty:
+                break
+        self.q.put((phrase, volume))
+
+    def _voice_loop(self):
         try:
-            voice_engine = pyttsx3.init("sapi5") if sys.platform == "win32" else pyttsx3.init()
-            voice_engine.setProperty("rate", 175)
+            import pyttsx3
+            voice = pyttsx3.init("sapi5") if sys.platform == "win32" else pyttsx3.init()
+            voice.setProperty("rate", 175)
         except Exception as exc:
+            voice = None
             self.events.put(("log", f"Voice unavailable: {exc}"))
         self.ready.set()
         while True:
-            job = self.q.get()
-            if job is None:
-                break
-            phrase, sound, volume = job
+            phrase, volume = self.q.get()
             try:
-                if sound and Path(sound).is_file() and pygame and pygame.mixer.get_init():
-                    pygame.mixer.music.load(sound)
-                    pygame.mixer.music.set_volume(float(volume))
-                    pygame.mixer.music.play()
-                    while pygame.mixer.music.get_busy():
-                        time.sleep(0.08)
-                elif voice_engine:
-                    voice_engine.setProperty("volume", float(volume))
-                    voice_engine.say(phrase)
-                    voice_engine.runAndWait()
-                else:
+                if voice:
+                    voice.setProperty("volume", float(volume))
+                    voice.say(phrase)
+                    voice.runAndWait()
+                elif sys.platform == "win32":
                     import winsound
                     winsound.MessageBeep()
             except Exception as exc:
                 self.events.put(("log", f"Sound error: {exc}"))
+
 
 class ScreenSelector(tk.Toplevel):
     def __init__(self, parent, label, done):
