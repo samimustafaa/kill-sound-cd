@@ -3,6 +3,7 @@ import ctypes
 import json
 import os
 import queue
+from difflib import SequenceMatcher
 import random
 import re
 import sys
@@ -54,7 +55,7 @@ DEFAULTS = {
     "killer_region": None, "victim_region": None, "player_name": "",
     "tesseract": "", "keywords": "eliminated,killed,defeated,elimination",
     "death_keywords": "eliminated by,you died,you were eliminated",
-    "volume": 0.9, "poll_interval": 0.40, "requires_game": True, "detection_mode": "counter",
+    "volume": 0.9, "poll_interval": 0.12, "requires_game": True, "detection_mode": "counter",
     "phrases": DEFAULT_EVENTS.copy(), "sounds": {}, "active": False, "auto_update": True,
 }
 
@@ -128,7 +129,7 @@ def read_counter(sct, region):
 
 def read_message(sct, region):
     image = get_ocr_image(sct, region)
-    return "\n".join(" ".join(line.split()) for line in pytesseract.image_to_string(image, config="--psm 6").lower().splitlines() if line.strip())
+    return "\n".join(" ".join(line.split()) for line in pytesseract.image_to_string(image, config="--psm 6", timeout=1.5).lower().splitlines() if line.strip())
 
 class AudioEngine:
     def __init__(self, events):
@@ -221,15 +222,15 @@ class ScreenSelector(tk.Toplevel):
             self.done({"left": left, "top": top, "width": width, "height": height})
 
 class KillDetector:
-    """Kill-feed-only scanner: separately calibrated attacker/victim name columns."""
+    """Read the two calibrated name columns and emit a kill as soon as it appears."""
     def __init__(self, settings, emit):
         self.settings = settings.copy()
         self.emit = emit
         self.stop_event = threading.Event()
         self.thread = None
         self.streak = 0
-        self.seen = {}
-        self.last_game_check = 0.0
+        self.active = {}  # (side, normalized name) -> missed scan count
+        self.last_game_check = -1000.0
         self.game_running = False
 
     def start(self):
@@ -240,72 +241,84 @@ class KillDetector:
         self.stop_event.set()
 
     @staticmethod
-    def name_present(line, username):
-        # Normalize spacing and punctuation while avoiding partial-name matches.
-        norm = lambda x: re.sub(r"[^a-z0-9]+", "", x.casefold())
-        tokens = re.findall(r"[a-z0-9_]+", line.casefold())
-        target = norm(username)
-        return bool(target) and (any(norm(t) == target for t in tokens) or
-                                  (len(target) >= 4 and target in norm(line)))
+    def normalize(value):
+        return re.sub(r"[^a-z0-9]", "", value.casefold())
+
+    @classmethod
+    def name_present(cls, line, username):
+        target = cls.normalize(username)
+        if not target:
+            return False
+        recognized = cls.normalize(line)
+        if target in recognized:
+            return True
+        # Name columns sometimes contain stray weapon glyphs or OCR punctuation.
+        # A narrow fuzzy match handles a single misread character in long names.
+        if len(target) < 7:
+            return False
+        words = re.findall(r"[a-z0-9_]+", line.casefold())
+        for start in range(len(words)):
+            for end in range(start + 1, min(len(words), start + 3) + 1):
+                candidate = cls.normalize("".join(words[start:end]))
+                if abs(len(candidate) - len(target)) <= 1:
+                    if SequenceMatcher(None, candidate, target).ratio() >= 0.88:
+                        return True
+        return False
 
     def _loop(self):
         cfg = self.settings
         tess = find_tesseract(cfg["tesseract"])
         if not tess:
-            self.emit(("error", "Tesseract OCR unavailable. Open Settings and test/install OCR."))
+            self.emit(("error", "Tesseract OCR unavailable. Open Settings to install or select OCR."))
             return
         pytesseract.pytesseract.tesseract_cmd = tess
         bundled_data = asset_path("tesseract/tessdata")
         if bundled_data.is_dir() and Path(tess).resolve() == asset_path("tesseract/tesseract.exe").resolve():
             os.environ["TESSDATA_PREFIX"] = str(bundled_data)
         username = cfg["player_name"].strip()
-        self.emit(("log", "Kill-feed scanner started for " + username + ". Watching attacker and victim zones."))
+        self.emit(("log", "Fast kill-feed scanner started for " + username))
         with mss.mss() as sct:
             while not self.stop_event.is_set():
                 now = time.monotonic()
-                if cfg["requires_game"]:
-                    if now - self.last_game_check >= 2:
-                        self.game_running = running_game()
-                        self.last_game_check = now
-                    if not self.game_running:
-                        self.stop_event.wait(0.4)
-                        continue
+                if cfg["requires_game"] and now - self.last_game_check >= 1.0:
+                    self.game_running = running_game()
+                    self.last_game_check = now
+                if cfg["requires_game"] and not self.game_running:
+                    self.stop_event.wait(0.2)
+                    continue
                 try:
-                    attacker_text = read_message(sct, cfg["killer_region"])
-                    victim_text = read_message(sct, cfg["victim_region"])
-                    self.emit(("ocr", "ATTACKER: " + (attacker_text[:65] or "—") +
-                                     " | VICTIM: " + (victim_text[:65] or "—")))
-                    # Evaluate individual visible feed rows; only announce new rows.
-                    events = []
-                    for side, content in (("kill", attacker_text), ("death", victim_text)):
+                    # Short OCR timeout prevents a hung OCR process from freezing detection.
+                    attacker = read_message(sct, cfg["killer_region"])
+                    victim = read_message(sct, cfg["victim_region"])
+                    self.emit(("ocr", "LEFT: " + (attacker[:90] or "—") +
+                                     "  |  RIGHT: " + (victim[:90] or "—")))
+                    observed = set()
+                    for side, content in (("kill", attacker), ("death", victim)):
                         for line in content.splitlines():
-                            line = " ".join(line.split())
-                            if line and self.name_present(line, username):
-                                events.append((side, line))
-                    # Each calibrated column is independent; feeds may show old rows from both sides.
-                    for side, line in events:
-                        key = (side, line)
-                        if key not in self.seen:
-                            self.seen[key] = now
-                            if side == "death":
-                                self.streak = 0
-                                self.emit(("streak", 0))
-                                self.emit(("log", "Death feed matched: " + line[:100]))
-                            else:
-                                self.streak += 1
-                                self.emit(("kill", (self.streak, 1)))
-                                self.emit(("log", "Kill feed matched: " + line[:100]))
-                    # Refresh visible rows, and re-arm only after a row disappears.
-                    active_keys = set(events)
-                    for key in active_keys:
-                        if key in self.seen:
-                            self.seen[key] = now
-                    for key, when in list(self.seen.items()):
-                        if key not in active_keys and now - when >= 3:
-                            del self.seen[key]
+                            if self.name_present(line, username):
+                                # OCR variants for the same on-screen username should not
+                                # trigger another announcement while the row remains visible.
+                                key = side
+                                observed.add(key)
+                                if key not in self.active:
+                                    if side == "death":
+                                        self.streak = 0
+                                        self.emit(("streak", 0))
+                                        self.emit(("log", "Death detected: " + line[:90]))
+                                    else:
+                                        self.streak += 1
+                                        self.emit(("kill", (self.streak, 1)))
+                                        self.emit(("log", "Kill detected: " + line[:90]))
+                    for key in observed:
+                        self.active[key] = 0
+                    for key in list(self.active):
+                        if key not in observed:
+                            self.active[key] += 1
+                            if self.active[key] >= 2:
+                                del self.active[key]
                 except Exception as exc:
-                    self.emit(("log", f"Kill-feed scan error: {exc}"))
-                self.stop_event.wait(max(0.2, float(cfg["poll_interval"])))
+                    self.emit(("log", f"Scan error: {exc}"))
+                self.stop_event.wait(max(0.08, min(0.3, float(cfg.get("poll_interval", 0.12)))))
         self.emit(("log", "Kill-feed scanner stopped."))
 
 
